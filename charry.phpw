@@ -1,0 +1,82 @@
+<?php
+
+define('ABSPATH', dirname(__FILE__));
+
+// Open Twitter-PHP library
+require(ABSPATH.'/Twitter-PHP/twitter.class.php');
+$twitter = new Twitter('consumer','consumer-secret','access','access-secret');
+$channel = $twitter->load(Twitter::ME_AND_FRIENDS);
+
+// Start new GTK window
+$wnd = new GtkWindow();
+$wnd->set_title('Charry');
+$wnd->set_size_request(400,600);
+// Set quit handler
+$wnd->connect_simple('destroy', array('Gtk', 'main_quit'));
+
+// Add new vertical box split
+$wnd->add($vbox = new GtkVBox());
+
+// Start new menubar
+$menubar = new GtkMenuBar();
+// Add menubar to box split
+$vbox->pack_start($menubar, 0, 0);
+// Make the File menu item
+$file = new GtkMenuItem('_File');
+// Add the File menu item to the menubar
+$menubar->append($file);
+// Make the File menu itself
+$menuFile = new GtkMenu();
+// Make the option 'Quit'
+$quit = new GtkMenuItem('_Quit');
+// Add the Quit option to the File menu
+$menuFile->append($quit);
+// Attach the File's menu to its menu item
+$file->set_submenu($menuFile);
+
+// Start paned vertical split (for tweets/submit box)
+$vpane = new GtkVPaned();
+// Set separator width to 5
+$vpane->set_border_width(5);
+// Set default separator position
+$vpane->set_position(460);
+
+// Start scrolled window
+$tweetScroll = new GtkScrolledWindow();
+// Hide scrollbars when we don't need them
+$tweetScroll->set_policy(Gtk::POLICY_AUTOMATIC, Gtk::POLICY_AUTOMATIC);
+// Create new VBox
+$tweets = new GtkVBox();
+// Load up them tweets!
+foreach($channel->status as $status) {
+	if(!file_exists(ABSPATH.'/cache/images/'.$status->user->screen_name.'.cache')) {
+		file_put_contents(ABSPATH.'/cache/images/'.$status->user->screen_name.'.cache', file_get_contents(htmlspecialchars($status->user->profile_image_url)));
+	}
+	$avatar = GtkImage::new_from_file(ABSPATH.'/cache/images/'.$status->user->screen_name.'.cache');
+	$name = new GtkLabel();
+	$name->set_text(utf8_decode($status->user->screen_name));
+	$text = new GtkLabel();
+	$text->set_text(utf8_decode($status->text));
+	$tweets->pack_start($avatar, true, true, 5);
+	$tweets->pack_start($name);
+	$tweets->pack_start($text);
+}
+// Add tweets to scrolled window
+$tweetScroll->add_with_viewport($tweets);
+// Add scrolled window to vertical pane
+$vpane->add1($tweetScroll);
+
+// Create text box for submitting tweets
+$sbox = new GtkTextView();
+$sbox->set_wrap_mode(Gtk::WRAP_WORD);
+// Add submit box to pane split
+$vpane->add2($sbox);
+
+// Add pane split to vertical box split
+$vbox->pack_start($vpane);
+
+// Let the magic begin!
+$wnd->show_all();
+Gtk::main();
+
+?>
