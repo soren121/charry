@@ -4,7 +4,7 @@ define('ABSPATH', dirname(__FILE__));
 
 // Open Twitter-PHP library
 require(ABSPATH.'/Twitter-PHP/twitter.class.php');
-$twitter = new Twitter('consumer','consumer-secret','access','access-secret');
+$twitter = new Twitter('pRt6zodBh1CdqyPtcyg','CPIzussNrhGCKmfIqFRFGZ8fDdyhjwK6F2Z73fPx0','accesstoken','accesstoken-secret');
 $channel = $twitter->load(Twitter::ME_AND_FRIENDS);
 
 // Start new GTK window
@@ -14,13 +14,13 @@ $wnd->set_size_request(400,600);
 // Set quit handler
 $wnd->connect_simple('destroy', array('Gtk', 'main_quit'));
 
-// Add new vertical box split
+// Add new vertical organizer
 $wnd->add($vbox = new GtkVBox());
 
 // Start new menubar
 $menubar = new GtkMenuBar();
-// Add menubar to box split
-$vbox->pack_start($menubar, 0, 0);
+// Add menubar to organizer
+$vbox->pack_start($menubar, false, false);
 // Make the File menu item
 $file = new GtkMenuItem('_File');
 // Add the File menu item to the menubar
@@ -49,17 +49,35 @@ $tweetScroll->set_policy(Gtk::POLICY_AUTOMATIC, Gtk::POLICY_AUTOMATIC);
 $tweets = new GtkVBox();
 // Load up them tweets!
 foreach($channel->status as $status) {
+	// If this user's avatar isn't cached, cache it!
 	if(!file_exists(ABSPATH.'/cache/images/'.$status->user->screen_name.'.cache')) {
 		file_put_contents(ABSPATH.'/cache/images/'.$status->user->screen_name.'.cache', file_get_contents(htmlspecialchars($status->user->profile_image_url)));
 	}
+	// Load the avatar from the cache
 	$avatar = GtkImage::new_from_file(ABSPATH.'/cache/images/'.$status->user->screen_name.'.cache');
+	// Make their username a GTK label, justified left, selectable, and wrapable.
 	$name = new GtkLabel();
+	$name->set_justify(Gtk::JUSTIFY_LEFT);
+	$name->set_selectable(true);
+	$name->set_line_wrap(true);
 	$name->set_text(utf8_decode($status->user->screen_name));
+	// Make their tweet a GTK label, justified left, selectable, and wrapable.
 	$text = new GtkLabel();
+	$text->set_justify(Gtk::JUSTIFY_LEFT);
+	$text->set_selectable(true);
+	$text->set_line_wrap(true);
+	$text->set_size_request(300, -1);
 	$text->set_text(utf8_decode($status->text));
-	$tweets->pack_start($avatar, true, true, 5);
-	$tweets->pack_start($name);
-	$tweets->pack_start($text);
+	// Make container for tweet
+	$tweetBox = new GtkFixed();
+	// Set size
+	$tweetBox->set_size_request(370, -1);
+	// Add stuff to it
+	$tweetBox->put($avatar, 0, 0);
+	$tweetBox->put($name, 60, 0);
+	$tweetBox->put($text, 60, 15);
+	// Add tweet box to tweets window
+	$tweets->pack_start($tweetBox);
 }
 // Add tweets to scrolled window
 $tweetScroll->add_with_viewport($tweets);
@@ -68,15 +86,54 @@ $vpane->add1($tweetScroll);
 
 // Create text box for submitting tweets
 $sbox = new GtkTextView();
+$sboxB = new GtkTextBuffer();
+$sbox->set_buffer($sboxB);
 $sbox->set_wrap_mode(Gtk::WRAP_WORD);
+$sbox->connect('key-press-event', 'on_key_press', $sbox, $sboxB, $tweets);
 // Add submit box to pane split
 $vpane->add2($sbox);
 
-// Add pane split to vertical box split
+// Add pane split to vertical organizer
 $vbox->pack_start($vpane);
+
+// Create statusbar
+$status = new GtkStatusbar();
+$eventbox = new GtkEventBox();
+$eventbox->add($status);
+$vbox->pack_start($eventbox, false, false);
+$status->push($status->get_context_id('start'), 'Loaded 20 tweets.');
+
+$sbox->grab_focus();
 
 // Let the magic begin!
 $wnd->show_all();
 Gtk::main();
+
+// Process tweet submission
+function on_key_press($widget, $event, $sbox, $sboxB, $tweets) {
+	global $twitter, $status;
+	// Did the user press Enter?
+	if($event->keyval == Gdk::KEY_Return) {
+		// If they pressed Shift+Enter, treat it as a new line
+		if($event->state & Gdk::SHIFT_MASK) {
+			return false;
+		}
+		// Set statusbar
+		$status->push($status->get_context_id('submit'), 'Submitting tweet...');
+		// Get text from the submit box
+		$input = $sboxB->get_text($sboxB->get_start_iter(), $sboxB->get_end_iter());
+		// Encode and send to Twitter!
+		$twitter->send(utf8_encode($input));
+		// Update statusbar once more
+		$status->push($status->get_context_id('submit'), 'Tweet successfully submitted.');
+		// Empty out the submit box
+		$sboxB->set_text('');
+		return true;
+	}
+	// I guess not :(
+	else {
+		return false;
+	}
+}
 
 ?>

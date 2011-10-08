@@ -64,6 +64,8 @@ class Twitter
 		$this->signatureMethod = new OAuthSignatureMethod_HMAC_SHA1();
 		$this->consumer = new OAuthConsumer($consumerKey, $consumerSecret);
 		$this->token = new OAuthConsumer($accessToken, $accessTokenSecret);
+		
+		$this->cacheDir = dirname(dirname(__FILE__));
 	}
 
 
