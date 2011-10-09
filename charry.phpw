@@ -4,35 +4,63 @@ define('ABSPATH', dirname(__FILE__));
 
 // Open Twitter-PHP library
 require(ABSPATH.'/Twitter-PHP/twitter.class.php');
-$twitter = new Twitter('pRt6zodBh1CdqyPtcyg','CPIzussNrhGCKmfIqFRFGZ8fDdyhjwK6F2Z73fPx0','access','access-secret');
-$channel = $twitter->load(Twitter::ME_AND_FRIENDS);
+$twitter = new Twitter('pRt6zodBh1CdqyPtcyg','CPIzussNrhGCKmfIqFRFGZ8fDdyhjwK6F2Z73fPx0','access token', 'access secret token');
 
 // Start new GTK window
-$wnd = new GtkWindow();
-$wnd->set_title('Charry');
-$wnd->set_size_request(400,600);
+$window = new GtkWindow();
+$window->set_title('Charry');
+$window->set_size_request(400,600);
 // Set quit handler
-$wnd->connect_simple('destroy', array('Gtk', 'main_quit'));
+$window->connect_simple('destroy', array('Gtk', 'main_quit'));
 
 // Add new vertical organizer
-$wnd->add($vbox = new GtkVBox());
+$window->add($vbox = new GtkVBox());
 
 // Start new menubar
 $menubar = new GtkMenuBar();
 // Add menubar to organizer
 $vbox->pack_start($menubar, false, false);
-// Make the File menu item
-$file = new GtkMenuItem('_File');
-// Add the File menu item to the menubar
-$menubar->append($file);
+// Make the File and Options menu items
+$ml_charry = new GtkMenuItem('_Charry');
+$ml_options = new GtkMenuItem('_Options');
+// Add the menu items to the menubar
+$menubar->append($ml_charry);
+$menubar->append($ml_options);
 // Make the File menu itself
-$menuFile = new GtkMenu();
-// Make the option 'Quit'
-$quit = new GtkMenuItem('_Quit');
-// Add the Quit option to the File menu
-$menuFile->append($quit);
+$m_charry = new GtkMenu();
 // Attach the File's menu to its menu item
-$file->set_submenu($menuFile);
+$ml_charry->set_submenu($m_charry);
+// Make the options 'Refresh' and 'Quit'
+$mi_refresh = new GtkMenuItem('Refresh');
+$mi_quit = new GtkMenuItem('_Quit');
+// Attach a signal handler to make it work
+$mi_refresh->connect('activate', 'on_menu_select');
+$mi_quit->connect('activate', 'on_menu_select');
+// Add the options to the File menu
+$m_charry->append($mi_refresh);
+$m_charry->append($mi_quit);
+// Make the Options menu
+$m_options = new GtkMenu();
+// Attach the Options menu to its menu item
+$ml_options->set_submenu($m_options);
+// Make submenu item for displaying names
+$mi_options_display = new GtkMenuItem('Display Name');
+// Attach to Options
+$m_options->append($mi_options_display);
+// Make submenu for displaying names
+$m_options_display = new GtkMenu();
+// Attach to item
+$mi_options_display->set_submenu($m_options_display);
+// Make the (few) options
+$mi_username = new GtkRadioMenuItem(null, 'Username');
+$mi_username->set_active(1);
+$mi_realname = new GtkRadioMenuItem($mi_username, 'Real name');
+// Attach to menu
+$m_options_display->append($mi_username);
+$m_options_display->append($mi_realname);
+// Attach signal handler
+$mi_username->connect('toggled', 'on_radio_toggle');
+$mi_realname->connect('toggled', 'on_radio_toggle');
 
 // Start paned vertical split (for tweets/submit box)
 $vpane = new GtkVPaned();
@@ -47,38 +75,7 @@ $tweetScroll = new GtkScrolledWindow();
 $tweetScroll->set_policy(Gtk::POLICY_AUTOMATIC, Gtk::POLICY_AUTOMATIC);
 // Create new VBox
 $tweets = new GtkVBox();
-// Load up them tweets!
-foreach($channel->status as $status) {
-	// If this user's avatar isn't cached, cache it!
-	if(!file_exists(ABSPATH.'/cache/images/'.$status->user->screen_name.'.cache')) {
-		file_put_contents(ABSPATH.'/cache/images/'.$status->user->screen_name.'.cache', file_get_contents(htmlspecialchars($status->user->profile_image_url)));
-	}
-	// Load the avatar from the cache
-	$avatar = GtkImage::new_from_file(ABSPATH.'/cache/images/'.$status->user->screen_name.'.cache');
-	// Make their username a GTK label, justified left, selectable, and wrapable.
-	$name = new GtkLabel();
-	$name->set_justify(Gtk::JUSTIFY_LEFT);
-	$name->set_selectable(true);
-	$name->set_line_wrap(true);
-	$name->set_text(utf8_decode($status->user->screen_name));
-	// Make their tweet a GTK label, justified left, selectable, and wrapable.
-	$text = new GtkLabel();
-	$text->set_justify(Gtk::JUSTIFY_LEFT);
-	$text->set_selectable(true);
-	$text->set_line_wrap(true);
-	$text->set_size_request(300, -1);
-	$text->set_markup($twitter->clickable($status->text));
-	// Make container for tweet
-	$tweetBox = new GtkFixed();
-	// Set size
-	$tweetBox->set_size_request(370, -1);
-	// Add stuff to it
-	$tweetBox->put($avatar, 0, 0);
-	$tweetBox->put($name, 60, 0);
-	$tweetBox->put($text, 60, 15);
-	// Add tweet box to tweets window
-	$tweets->pack_start($tweetBox);
-}
+
 // Add tweets to scrolled window
 $tweetScroll->add_with_viewport($tweets);
 // Add scrolled window to vertical pane
@@ -97,17 +94,80 @@ $vpane->add2($sbox);
 $vbox->pack_start($vpane);
 
 // Create statusbar
-$status = new GtkStatusbar();
+$statusbar = new GtkStatusbar();
 $eventbox = new GtkEventBox();
-$eventbox->add($status);
+$eventbox->add($statusbar);
 $vbox->pack_start($eventbox, false, false);
-$status->push($status->get_context_id('start'), 'Loaded 20 tweets.');
 
 $sbox->grab_focus();
 
 // Let the magic begin!
-$wnd->show_all();
+$window->show_all();
+// The secret: allow some time to load the window, then stop and load tweets
+Gtk::timeout_add(800, 'load_tweets');
 Gtk::main();
+
+function load_tweets() {
+	global $twitter, $tweets, $statusbar;
+	// Tell the user that we're actually doing something!
+	$statusbar->push($statusbar->get_context_id('start'), 'Loading timeline...');
+	while (Gtk::events_pending()) {
+    	Gtk::main_iteration();
+	}
+	$channel = $twitter->load(Twitter::ME_AND_FRIENDS);
+	// Load up them tweets!
+	foreach($channel->status as $status) {
+		// If this user's avatar isn't cached, cache it!
+		if(!file_exists(ABSPATH.'/cache/images/'.$status->user->screen_name.'.cache')) {
+			file_put_contents(ABSPATH.'/cache/images/'.$status->user->screen_name.'.cache', file_get_contents(htmlspecialchars($status->user->profile_image_url)));
+		}
+		// Load the avatar from the cache
+		$avatar = GtkImage::new_from_file(ABSPATH.'/cache/images/'.$status->user->screen_name.'.cache');
+		// Make their username a GTK label, justified left, selectable, and wrapable.
+		$name = new GtkLabel();
+		$name->set_justify(Gtk::JUSTIFY_LEFT);
+		$name->set_selectable(true);
+		$name->set_line_wrap(true);
+		$name->set_markup('<b>'.utf8_decode($status->user->screen_name).'</b>');
+		// Make their tweet a GTK label, justified left, selectable, and wrapable.
+		$text = new GtkLabel();
+		$text->set_justify(Gtk::JUSTIFY_LEFT);
+		$text->set_selectable(true);
+		$text->set_line_wrap(true);
+		$text->set_size_request(300, -1);
+		$text->set_markup($twitter->clickable($status->text));
+		// Make container for tweet
+		$tweetBox = new GtkFixed();
+		// Set size
+		$tweetBox->set_size_request(370, -1);
+		// Add stuff to it
+		$tweetBox->put($avatar, 0, 0);
+		$tweetBox->put($name, 60, 0);
+		$tweetBox->put($text, 60, 15);
+		// Add tweet box to tweets window
+		$tweets->pack_start($tweetBox);
+	}
+	$tweets->show_all();
+	$statusbar->push($statusbar->get_context_id('fin'), 'Loaded '.count($channel->status).' tweets.');
+	return false;
+}
+
+function on_menu_select($item) {
+	$item = $item->child->get_label();
+	switch($item) {
+		case "Refresh":
+			load_tweets();
+			break;
+		case "_Quit":
+			Gtk::main_quit();
+			break;
+	}
+}
+
+function on_radio_toggle($item) {
+	$item = $item->child->get_label();
+	$active = $item->get_active();
+}
 
 // Process tweet submission
 function on_key_press($widget, $event, $sbox, $sboxB, $tweets) {
@@ -128,6 +188,8 @@ function on_key_press($widget, $event, $sbox, $sboxB, $tweets) {
 		$status->push($status->get_context_id('submit'), 'Tweet successfully submitted.');
 		// Empty out the submit box
 		$sboxB->set_text('');
+		// Reload timeline
+		load_tweets();
 		return true;
 	}
 	// I guess not :(

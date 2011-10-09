@@ -33,9 +33,6 @@ class Twitter
 	/** @var int */
 	public static $cacheExpire = 1800; // 30 min
 
-	/** @var string */
-	public static $cacheDir;
-
 	/** @var OAuthSignatureMethod */
 	private $signatureMethod;
 
@@ -65,7 +62,7 @@ class Twitter
 		$this->consumer = new OAuthConsumer($consumerKey, $consumerSecret);
 		$this->token = new OAuthConsumer($accessToken, $accessTokenSecret);
 		
-		$this->cacheDir = dirname(dirname(__FILE__));
+		$this->cacheDir = dirname(dirname(__FILE__)).'/cache';
 	}
 
 
@@ -254,14 +251,14 @@ class Twitter
 	 */
 	public function cachedRequest($request, $data = NULL, $cacheExpire = NULL)
 	{
-		if (!self::$cacheDir) {
+		if (!$this->cacheDir) {
 			return $this->request($request, $data, 'GET');
 		}
 		if ($cacheExpire === NULL) {
 			$cacheExpire = self::$cacheExpire;
 		}
 
-		$cacheFile = self::$cacheDir . '/twitter.' . md5($request . json_encode($data) . serialize(array($this->consumer, $this->token)));
+		$cacheFile = $this->cacheDir . '/twitter.' . md5($request . json_encode($data) . serialize(array($this->consumer, $this->token)));
 		$cache = @file_get_contents($cacheFile); // intentionally @
 		$cache = strncmp($cache, '<', 1) ? @json_decode($cache) : @simplexml_load_string($cache); // intentionally @
 		if ($cache && @filemtime($cacheFile) + $cacheExpire > time()) { // intentionally @
