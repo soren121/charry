@@ -4,7 +4,7 @@ define('ABSPATH', dirname(__FILE__));
 
 // Open Twitter-PHP library
 require(ABSPATH.'/Twitter-PHP/twitter.class.php');
-$twitter = new Twitter('pRt6zodBh1CdqyPtcyg','CPIzussNrhGCKmfIqFRFGZ8fDdyhjwK6F2Z73fPx0','accesstoken','accesstoken-secret');
+$twitter = new Twitter('pRt6zodBh1CdqyPtcyg','CPIzussNrhGCKmfIqFRFGZ8fDdyhjwK6F2Z73fPx0','access','access-secret');
 $channel = $twitter->load(Twitter::ME_AND_FRIENDS);
 
 // Start new GTK window
@@ -67,7 +67,7 @@ foreach($channel->status as $status) {
 	$text->set_selectable(true);
 	$text->set_line_wrap(true);
 	$text->set_size_request(300, -1);
-	$text->set_text(utf8_decode($status->text));
+	$text->set_markup($twitter->clickable($status->text));
 	// Make container for tweet
 	$tweetBox = new GtkFixed();
 	// Set size
