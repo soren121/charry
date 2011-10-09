@@ -4,7 +4,7 @@ define('ABSPATH', dirname(__FILE__));
 
 // Open Twitter-PHP library
 require(ABSPATH.'/Twitter-PHP/twitter.class.php');
-$twitter = new Twitter('pRt6zodBh1CdqyPtcyg','CPIzussNrhGCKmfIqFRFGZ8fDdyhjwK6F2Z73fPx0','access token', 'access secret token');
+$twitter = new Twitter('pRt6zodBh1CdqyPtcyg','CPIzussNrhGCKmfIqFRFGZ8fDdyhjwK6F2Z73fPx0','access-token','access-secret-token');
 
 // Start new GTK window
 $window = new GtkWindow();
@@ -31,7 +31,7 @@ $m_charry = new GtkMenu();
 // Attach the File's menu to its menu item
 $ml_charry->set_submenu($m_charry);
 // Make the options 'Refresh' and 'Quit'
-$mi_refresh = new GtkMenuItem('Refresh');
+$mi_refresh = new GtkMenuItem('_Refresh');
 $mi_quit = new GtkMenuItem('_Quit');
 // Attach a signal handler to make it work
 $mi_refresh->connect('activate', 'on_menu_select');
@@ -55,12 +55,12 @@ $mi_options_display->set_submenu($m_options_display);
 $mi_username = new GtkRadioMenuItem(null, 'Username');
 $mi_username->set_active(1);
 $mi_realname = new GtkRadioMenuItem($mi_username, 'Real name');
+// Attach signal handler
+$mi_username->connect('toggled', 'on_menu_select');
+$mi_realname->connect('toggled', 'on_menu_select');
 // Attach to menu
 $m_options_display->append($mi_username);
 $m_options_display->append($mi_realname);
-// Attach signal handler
-$mi_username->connect('toggled', 'on_radio_toggle');
-$mi_realname->connect('toggled', 'on_radio_toggle');
 
 // Start paned vertical split (for tweets/submit box)
 $vpane = new GtkVPaned();
@@ -111,9 +111,11 @@ function load_tweets() {
 	global $twitter, $tweets, $statusbar;
 	// Tell the user that we're actually doing something!
 	$statusbar->push($statusbar->get_context_id('start'), 'Loading timeline...');
+	// Update the UI
 	while (Gtk::events_pending()) {
     	Gtk::main_iteration();
 	}
+	// Load tweets from you & people you've followed, defaults to 20
 	$channel = $twitter->load(Twitter::ME_AND_FRIENDS);
 	// Load up them tweets!
 	foreach($channel->status as $status) {
@@ -122,7 +124,12 @@ function load_tweets() {
 			file_put_contents(ABSPATH.'/cache/images/'.$status->user->screen_name.'.cache', file_get_contents(htmlspecialchars($status->user->profile_image_url)));
 		}
 		// Load the avatar from the cache
-		$avatar = GtkImage::new_from_file(ABSPATH.'/cache/images/'.$status->user->screen_name.'.cache');
+		$avatar_pb = GdkPixbuf::new_from_file(ABSPATH.'/cache/images/'.$status->user->screen_name.'.cache');
+		if($avatar_pb->get_width() > 48) {
+			// This avatar isn't 48 pixels like the API promised! Let's scale it down.
+			$avatar_pb = $avatar_pb->scale_simple(48, 48, Gdk::INTERP_HYPER);
+		}
+		$avatar = GtkImage::new_from_pixbuf($avatar_pb);
 		// Make their username a GTK label, justified left, selectable, and wrapable.
 		$name = new GtkLabel();
 		$name->set_justify(Gtk::JUSTIFY_LEFT);
@@ -147,26 +154,28 @@ function load_tweets() {
 		// Add tweet box to tweets window
 		$tweets->pack_start($tweetBox);
 	}
+	// Show all loaded tweets
 	$tweets->show_all();
+	// Update statusbar
 	$statusbar->push($statusbar->get_context_id('fin'), 'Loaded '.count($channel->status).' tweets.');
+	// Tell PHP-GTK that this function doesn't need to be auto-run again
 	return false;
 }
 
 function on_menu_select($item) {
 	$item = $item->child->get_label();
 	switch($item) {
-		case "Refresh":
+		case "_Refresh":
 			load_tweets();
 			break;
 		case "_Quit":
 			Gtk::main_quit();
 			break;
+		case "Username":
+			break;
+		case "Real name":
+			break;
 	}
-}
-
-function on_radio_toggle($item) {
-	$item = $item->child->get_label();
-	$active = $item->get_active();
 }
 
 // Process tweet submission
