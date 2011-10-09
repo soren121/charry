@@ -1,10 +1,26 @@
 <?php
 
+/**********************************************
+
+	Charry 0.9
+	A Twitter client written in PHP-GTK
+	
+	Copyright (c) 2011 soren121.
+	
+	Licensed under the GNU General Public
+	License version 3. The full text of 
+	the license is included; see LICENSE.txt.
+
+**********************************************/
+
 define('ABSPATH', dirname(__FILE__));
 
+// Open settings file
+$settings = simplexml_load_file(ABSPATH.'/settings.xml');
+// Open TwitterOAuth library
+require(ABSPATH.'/Twitter-PHP/OAuth.twitter.php');
 // Open Twitter-PHP library
 require(ABSPATH.'/Twitter-PHP/twitter.class.php');
-$twitter = new Twitter('pRt6zodBh1CdqyPtcyg','CPIzussNrhGCKmfIqFRFGZ8fDdyhjwK6F2Z73fPx0','access-token','access-secret-token');
 
 // Start new GTK window
 $window = new GtkWindow();
@@ -53,8 +69,15 @@ $m_options_display = new GtkMenu();
 $mi_options_display->set_submenu($m_options_display);
 // Make the (few) options
 $mi_username = new GtkRadioMenuItem(null, 'Username');
-$mi_username->set_active(1);
 $mi_realname = new GtkRadioMenuItem($mi_username, 'Real name');
+// Set the selected one
+switch($settings->ui->displayname) {
+	case "screen_name":
+		$mi_username->set_active(true);
+		break;
+	case "name":
+		$mi_realname->set_active(true);
+}
 // Attach signal handler
 $mi_username->connect('toggled', 'on_menu_select');
 $mi_realname->connect('toggled', 'on_menu_select');
@@ -103,18 +126,80 @@ $sbox->grab_focus();
 
 // Let the magic begin!
 $window->show_all();
-// The secret: allow some time to load the window, then stop and load tweets
-Gtk::timeout_add(800, 'load_tweets');
+
+if(isset($settings->oauth->accessToken)) {
+	// The secret: allow some time to load the window, then stop and load tweets
+	Gtk::timeout_add(800, 'load_tweets');
+}
+else {
+	Gtk::timeout_add(800, 'twitter_oAuth');
+}
+
 Gtk::main();
 
+function twitter_oAuth() {
+	global $settings, $tweets, $statusbar;
+	$oauth = new TwitterOAuth(utf8_encode($settings->oauth->consumerToken), utf8_encode($settings->oauth->consumerSecret));
+	// Tell the user that we're actually doing something!
+	$statusbar->push($statusbar->get_context_id('start'), 'Obtaining request tokens from Twitter...');
+	// Update the UI
+	while (Gtk::events_pending()) {
+		Gtk::main_iteration();
+	}
+	// Ask Twitter for request tokens so we can start authenticating
+	$request = $oauth->getRequestToken();
+	// Save the request tokens to our settings file
+	$settings->oauth->requestToken = $request['oauth_token'];
+	$settings->oauth->requestSecret = $request['oauth_token_secret'];
+	$settings->asXML(ABSPATH.'/settings.xml');
+	// Get an authentication URL
+	$request_link = $oauth->getAuthorizeURL($request);
+	// Open browser
+	$os = explode(' ', php_uname('s'));
+	switch($os[0]) {
+		case "Windows":
+			exec('cmd /c start '.$request_link);
+			break;
+		case "Darwin":
+			exec('open '.$request_link);
+			break;
+		default:
+			exec('xdg-open '.$request_link);
+			break;
+	}
+	// Open prompt
+	$prompt = new Prompt('Enter PIN: ');
+	$input = $prompt->entry->get_text();
+	// New TwitterOAuth object: this time with all the fixings
+	$oauth = new TwitterOAuth(utf8_encode($settings->oauth->consumerToken), utf8_encode($settings->oauth->consumerSecret), utf8_encode($settings->oauth->requestToken), utf8_encode($settings->oauth->requestSecret));
+	// Politely ask Twitter for an access token
+	$request = $oauth->getAccessToken($input);
+	// Yay, we got access tokens! :D
+	$settings->oauth->accessToken = $request['oauth_token'];
+	$settings->oauth->accessSecret = $request['oauth_token_secret'];
+	$settings->asXML(ABSPATH.'/settings.xml');
+	// Verify our stuff
+	$twitter = new Twitter(utf8_encode($settings->oauth->consumerToken), utf8_encode($settings->oauth->consumerSecret), utf8_encode($settings->oauth->accessToken), utf8_encode($settings->oauth->accessSecret));
+	if($twitter->authenticate()) {
+		$statusbar->push($statusbar->get_context_id('fin'), 'Successfully authenticated with Twitter!');
+		// Update the UI
+		while (Gtk::events_pending()) {
+			Gtk::main_iteration();
+		}
+		load_tweets();
+	}
+}
+
 function load_tweets() {
-	global $twitter, $tweets, $statusbar;
+	global $settings, $tweets, $statusbar;
 	// Tell the user that we're actually doing something!
 	$statusbar->push($statusbar->get_context_id('start'), 'Loading timeline...');
 	// Update the UI
 	while (Gtk::events_pending()) {
     	Gtk::main_iteration();
 	}
+	// Open up a Twitter connection
+	$twitter = new Twitter(utf8_encode($settings->oauth->consumerToken), utf8_encode($settings->oauth->consumerSecret), utf8_encode($settings->oauth->accessToken), utf8_encode($settings->oauth->accessSecret));
 	// Load tweets from you & people you've followed, defaults to 20
 	$channel = $twitter->load(Twitter::ME_AND_FRIENDS);
 	// Load up them tweets!
@@ -135,7 +220,8 @@ function load_tweets() {
 		$name->set_justify(Gtk::JUSTIFY_LEFT);
 		$name->set_selectable(true);
 		$name->set_line_wrap(true);
-		$name->set_markup('<b>'.utf8_decode($status->user->screen_name).'</b>');
+		$name_type = $settings->ui->displayname;
+		$name->set_markup('<b>'.utf8_decode($status->user->$name_type).'</b>');
 		// Make their tweet a GTK label, justified left, selectable, and wrapable.
 		$text = new GtkLabel();
 		$text->set_justify(Gtk::JUSTIFY_LEFT);
@@ -163,6 +249,7 @@ function load_tweets() {
 }
 
 function on_menu_select($item) {
+	global $settings;
 	$item = $item->child->get_label();
 	switch($item) {
 		case "_Refresh":
@@ -172,8 +259,12 @@ function on_menu_select($item) {
 			Gtk::main_quit();
 			break;
 		case "Username":
+			$settings->ui->displayname = 'screen_name';
+			$settings->asXML(ABSPATH.'/settings.xml');
 			break;
 		case "Real name":
+			$settings->ui->displayname = 'name';
+			$settings->asXML(ABSPATH.'/settings.xml');
 			break;
 	}
 }
@@ -204,6 +295,37 @@ function on_key_press($widget, $event, $sbox, $sboxB, $tweets) {
 	// I guess not :(
 	else {
 		return false;
+	}
+}
+
+class Prompt {
+	var $entry;
+	function Prompt($str) {
+		$dialog = new GtkDialog('Prompt', null, Gtk::DIALOG_MODAL);
+		$top_area = $dialog->vbox;
+		$top_area->pack_start($hbox = new GtkHBox());
+		$stock = GtkImage::new_from_stock(Gtk::STOCK_DIALOG_QUESTION, Gtk::ICON_SIZE_DIALOG);
+		$hbox->pack_start($stock, 0, 0);
+		$hbox->pack_start(new GtkLabel($str));
+		$this->entry = new GtkEntry();
+		$hbox->pack_start($this->entry, 0, 0);
+		$hbox->pack_start(new GtkLabel(' '), 0, 0);
+	
+		$dialog->add_button(Gtk::STOCK_OK, Gtk::RESPONSE_OK);
+	
+		$buttons = $dialog->action_area->get_children();
+		$button_ok = $buttons[0]; // get the ID of the OK button
+		// simulate button click when user press enter
+		$this->entry->connect('activate', array(&$this, 'on_enter'), $button_ok);
+	
+		$dialog->set_has_separator(false);
+		$dialog->show_all();
+		$dialog->run();
+		$dialog->destroy();
+	}
+	
+	function on_enter($entry, $button) {
+		$button->clicked();
 	}
 }
 

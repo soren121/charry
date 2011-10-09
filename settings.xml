@@ -1,0 +1,10 @@
+<?xml version="1.0"?>
+<settings>
+	<oauth>
+		<consumerToken>pRt6zodBh1CdqyPtcyg</consumerToken>
+		<consumerSecret>CPIzussNrhGCKmfIqFRFGZ8fDdyhjwK6F2Z73fPx0</consumerSecret>
+	</oauth>
+	<ui>
+		<displayname>screen_name</displayname>
+	</ui>
+</settings>
