@@ -7,9 +7,9 @@
 	
 	Copyright (c) 2011 soren121.
 	
-	Licensed under the GNU General Public
-	License version 3. The full text of 
-	the license is included; see LICENSE.txt.
+	Licensed under the Microsoft Reciprocal
+	License. The full text of the license 
+	should be included; see LICENSE.txt.
 
 **********************************************/
 
@@ -38,52 +38,64 @@ $menubar = new GtkMenuBar();
 $vbox->pack_start($menubar, false, false);
 // Make the File and Options menu items
 $ml_charry = new GtkMenuItem('_Charry');
+//$ml_twitter = new GtkMenuItem('_Twitter');
 $ml_options = new GtkMenuItem('_Options');
 // Add the menu items to the menubar
 $menubar->append($ml_charry);
+//$menubar->append($ml_twitter);
 $menubar->append($ml_options);
-// Make the File menu itself
-$m_charry = new GtkMenu();
-// Attach the File's menu to its menu item
-$ml_charry->set_submenu($m_charry);
-// Make the options 'Refresh' and 'Quit'
-$mi_refresh = new GtkMenuItem('_Refresh');
-$mi_quit = new GtkMenuItem('_Quit');
-// Attach a signal handler to make it work
-$mi_refresh->connect('activate', 'on_menu_select');
-$mi_quit->connect('activate', 'on_menu_select');
-// Add the options to the File menu
-$m_charry->append($mi_refresh);
-$m_charry->append($mi_quit);
-// Make the Options menu
-$m_options = new GtkMenu();
-// Attach the Options menu to its menu item
-$ml_options->set_submenu($m_options);
-// Make submenu item for displaying names
-$mi_options_display = new GtkMenuItem('Display Name');
-// Attach to Options
-$m_options->append($mi_options_display);
-// Make submenu for displaying names
-$m_options_display = new GtkMenu();
-// Attach to item
-$mi_options_display->set_submenu($m_options_display);
-// Make the (few) options
-$mi_username = new GtkRadioMenuItem(null, 'Username');
-$mi_realname = new GtkRadioMenuItem($mi_username, 'Real name');
-// Set the selected one
-switch($settings->ui->displayname) {
-	case "screen_name":
-		$mi_username->set_active(true);
-		break;
-	case "name":
-		$mi_realname->set_active(true);
-}
-// Attach signal handler
-$mi_username->connect('toggled', 'on_menu_select');
-$mi_realname->connect('toggled', 'on_menu_select');
-// Attach to menu
-$m_options_display->append($mi_username);
-$m_options_display->append($mi_realname);
+	// Make the File menu itself
+	$m_charry = new GtkMenu();
+	// Attach the File's menu to its menu item
+	$ml_charry->set_submenu($m_charry);
+		// Make the options 'Refresh' and 'Quit'
+		$mi_refresh = new GtkMenuItem('_Refresh');
+		$mi_quit = new GtkMenuItem('_Quit');
+		// Attach a signal handler to make it work
+		$mi_refresh->connect('activate', 'on_menu_select');
+		$mi_quit->connect('activate', 'on_menu_select');
+		// Add the options to the File menu
+		$m_charry->append($mi_refresh);
+		$m_charry->append($mi_quit);
+	// Make the Twitter menu
+	/*$m_twitter = new GtkMenu();
+	// Attach the Twitter menu to its menu item
+	$ml_twitter->set_submenu($m_twitter);
+		// Make menu item for searches
+		$mi_twitter_search = new GtkMenuItem('Search...');
+		// Attach signal handler to make it work
+		$mi_twitter_search->connect('activate', 'on_menu_select');
+		// Attach to Twitter menu
+		$m_twitter->append($mi_twitter_search);*/
+	// Make the Options menu
+	$m_options = new GtkMenu();
+	// Attach the Options menu to its menu item
+	$ml_options->set_submenu($m_options);
+		// Make submenu item for displaying names
+		$mi_options_display = new GtkMenuItem('Display Name');
+		// Attach to Options
+		$m_options->append($mi_options_display);
+			// Make submenu for displaying names
+			$m_options_display = new GtkMenu();
+			// Attach to item
+			$mi_options_display->set_submenu($m_options_display);
+			// Make the (few) options
+			$mi_username = new GtkRadioMenuItem(null, 'Username');
+			$mi_realname = new GtkRadioMenuItem($mi_username, 'Real name');
+			// Set the selected one
+			switch($settings->ui->displayname) {
+				case "screen_name":
+					$mi_username->set_active(true);
+					break;
+				case "name":
+					$mi_realname->set_active(true);
+			}
+			// Attach signal handler
+			$mi_username->connect('toggled', 'on_menu_select');
+			$mi_realname->connect('toggled', 'on_menu_select');
+			// Attach to menu
+			$m_options_display->append($mi_username);
+			$m_options_display->append($mi_realname);
 
 // Start paned vertical split (for tweets/submit box)
 $vpane = new GtkVPaned();
@@ -97,7 +109,7 @@ $tweetScroll = new GtkScrolledWindow();
 // Hide scrollbars when we don't need them
 $tweetScroll->set_policy(Gtk::POLICY_AUTOMATIC, Gtk::POLICY_AUTOMATIC);
 // Create new VBox
-$tweets = new GtkVBox();
+$tweets = new GtkVBox(false, 10);
 
 // Add tweets to scrolled window
 $tweetScroll->add_with_viewport($tweets);
@@ -129,21 +141,24 @@ $window->show_all();
 
 if(isset($settings->oauth->accessToken)) {
 	// The secret: allow some time to load the window, then stop and load tweets
+	// Open up a Twitter connection
+	$twitter = new Twitter(utf8_encode($settings->oauth->consumerToken), utf8_encode($settings->oauth->consumerSecret), utf8_encode($settings->oauth->accessToken), utf8_encode($settings->oauth->accessSecret));
 	Gtk::timeout_add(800, 'load_tweets');
 }
 else {
+	// Charry needs to authenticate with Twitter first
 	Gtk::timeout_add(800, 'twitter_oAuth');
 }
 
 Gtk::main();
 
 function twitter_oAuth() {
-	global $settings, $tweets, $statusbar;
+	global $settings, $twitter, $statusbar;
 	$oauth = new TwitterOAuth(utf8_encode($settings->oauth->consumerToken), utf8_encode($settings->oauth->consumerSecret));
 	// Tell the user that we're actually doing something!
 	$statusbar->push($statusbar->get_context_id('start'), 'Obtaining request tokens from Twitter...');
 	// Update the UI
-	while (Gtk::events_pending()) {
+	while(Gtk::events_pending()) {
 		Gtk::main_iteration();
 	}
 	// Ask Twitter for request tokens so we can start authenticating
@@ -165,7 +180,6 @@ function twitter_oAuth() {
 			break;
 		default:
 			exec('xdg-open '.$request_link);
-			break;
 	}
 	// Open prompt
 	$prompt = new Prompt('Enter PIN: ');
@@ -183,27 +197,41 @@ function twitter_oAuth() {
 	if($twitter->authenticate()) {
 		$statusbar->push($statusbar->get_context_id('fin'), 'Successfully authenticated with Twitter!');
 		// Update the UI
-		while (Gtk::events_pending()) {
+		while(Gtk::events_pending()) {
 			Gtk::main_iteration();
 		}
 		load_tweets();
 	}
 }
 
-function load_tweets() {
-	global $settings, $tweets, $statusbar;
+function load_tweets($search = null) {
+	global $twitter, $settings, $tweets, $statusbar;
 	// Tell the user that we're actually doing something!
 	$statusbar->push($statusbar->get_context_id('start'), 'Loading timeline...');
 	// Update the UI
-	while (Gtk::events_pending()) {
+	while(Gtk::events_pending()) {
     	Gtk::main_iteration();
 	}
-	// Open up a Twitter connection
-	$twitter = new Twitter(utf8_encode($settings->oauth->consumerToken), utf8_encode($settings->oauth->consumerSecret), utf8_encode($settings->oauth->accessToken), utf8_encode($settings->oauth->accessSecret));
-	// Load tweets from you & people you've followed, defaults to 20
-	$channel = $twitter->load(Twitter::ME_AND_FRIENDS);
+	// Clear out anything that's there
+	foreach($tweets->children() as $child) {
+		$child->destroy();
+	}
+	if(isset($search)) {
+		// Load tweets for search result, defaults to 20
+		$results = $twitter->search($search);
+	}
+	else {
+		// Load tweets from you & people you've followed, defaults to 20
+		$results = $twitter->load(Twitter::ME_AND_FRIENDS)->status;
+	}
 	// Load up them tweets!
-	foreach($channel->status as $status) {
+	foreach($results as $status) {
+		// Compatibility for searches
+		if($search != false) {
+			$status->user->screen_name = $status->from_user;
+			$status->user->name = $status->from_user;
+			$status->user->profile_image_url = $status->profile_image_url;
+		}
 		// If this user's avatar isn't cached, cache it!
 		if(!file_exists(ABSPATH.'/cache/images/'.$status->user->screen_name.'.cache')) {
 			file_put_contents(ABSPATH.'/cache/images/'.$status->user->screen_name.'.cache', file_get_contents(htmlspecialchars($status->user->profile_image_url)));
@@ -217,33 +245,41 @@ function load_tweets() {
 		$avatar = GtkImage::new_from_pixbuf($avatar_pb);
 		// Make their username a GTK label, justified left, selectable, and wrapable.
 		$name = new GtkLabel();
-		$name->set_justify(Gtk::JUSTIFY_LEFT);
+		$name->set_alignment(0, 0);
 		$name->set_selectable(true);
-		$name->set_line_wrap(true);
 		$name_type = $settings->ui->displayname;
 		$name->set_markup('<b>'.utf8_decode($status->user->$name_type).'</b>');
 		// Make their tweet a GTK label, justified left, selectable, and wrapable.
 		$text = new GtkLabel();
 		$text->set_justify(Gtk::JUSTIFY_LEFT);
+		$text->set_alignment(0, 0);
 		$text->set_selectable(true);
 		$text->set_line_wrap(true);
 		$text->set_size_request(300, -1);
-		$text->set_markup($twitter->clickable($status->text));
-		// Make container for tweet
-		$tweetBox = new GtkFixed();
-		// Set size
+		$text->set_markup($twitter->clickable(utf8_decode($status->text)));
+		// Make the date and time a <small> GTK label, justified left, selectable, and linkable.
+		$datetime = new GtkLabel();
+		$datetime->set_alignment(0, 0);
+		$datetime->set_selectable(true);
+		$datetime->set_markup('<small>'.date('l, F j Y \a\t g:i a', strtotime($status->created_at)).'</small>');
+		// Make containers for tweet
+		$tweetBox = new GtkHBox();
+		$tweetBox_inner = new GtkVBox();
+		$tweetBox->pack_end($tweetBox_inner);
+		// Set container attributes
 		$tweetBox->set_size_request(370, -1);
 		// Add stuff to it
-		$tweetBox->put($avatar, 0, 0);
-		$tweetBox->put($name, 60, 0);
-		$tweetBox->put($text, 60, 15);
+		$tweetBox->pack_start($avatar);
+		$tweetBox_inner->pack_start($name, false, false);
+		$tweetBox_inner->pack_start($text, false, false);
+		$tweetBox_inner->pack_start($datetime, false, false);
 		// Add tweet box to tweets window
 		$tweets->pack_start($tweetBox);
 	}
 	// Show all loaded tweets
 	$tweets->show_all();
 	// Update statusbar
-	$statusbar->push($statusbar->get_context_id('fin'), 'Loaded '.count($channel->status).' tweets.');
+	$statusbar->push($statusbar->get_context_id('fin'), 'Loaded '.count($results).' tweets.');
 	// Tell PHP-GTK that this function doesn't need to be auto-run again
 	return false;
 }
@@ -258,6 +294,11 @@ function on_menu_select($item) {
 		case "_Quit":
 			Gtk::main_quit();
 			break;
+		case "Search...":
+			// NOT WORKING, must be buggy >:(
+			//$prompt = new Prompt('Enter search terms: ');
+			//load_tweets($prompt->entry->get_text());
+			break;
 		case "Username":
 			$settings->ui->displayname = 'screen_name';
 			$settings->asXML(ABSPATH.'/settings.xml');
@@ -265,13 +306,12 @@ function on_menu_select($item) {
 		case "Real name":
 			$settings->ui->displayname = 'name';
 			$settings->asXML(ABSPATH.'/settings.xml');
-			break;
 	}
 }
 
 // Process tweet submission
 function on_key_press($widget, $event, $sbox, $sboxB, $tweets) {
-	global $twitter, $status;
+	global $twitter, $statusbar;
 	// Did the user press Enter?
 	if($event->keyval == Gdk::KEY_Return) {
 		// If they pressed Shift+Enter, treat it as a new line
@@ -279,15 +319,17 @@ function on_key_press($widget, $event, $sbox, $sboxB, $tweets) {
 			return false;
 		}
 		// Set statusbar
-		$status->push($status->get_context_id('submit'), 'Submitting tweet...');
+		$statusbar->push($statusbar->get_context_id('submit'), 'Submitting tweet...');
 		// Get text from the submit box
 		$input = $sboxB->get_text($sboxB->get_start_iter(), $sboxB->get_end_iter());
-		// Encode and send to Twitter!
-		$twitter->send(utf8_encode($input));
-		// Update statusbar once more
-		$status->push($status->get_context_id('submit'), 'Tweet successfully submitted.');
 		// Empty out the submit box
 		$sboxB->set_text('');
+		// Update the UI
+		while(Gtk::events_pending()) {
+			Gtk::main_iteration();
+		}
+		// Encode and send to Twitter!
+		$twitter->send(utf8_encode($input));
 		// Reload timeline
 		load_tweets();
 		return true;
