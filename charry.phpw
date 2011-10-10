@@ -85,11 +85,25 @@ $menubar->append($ml_options);
 			// Attach to menu
 			$m_options_display->append($mi_username);
 			$m_options_display->append($mi_realname);
+			
+// Create vertical split
+$vpane = new GtkVPaned();
+$vpane->set_border_width(3);
+$vpane->set_position(500);
+$vbox->pack_start($vpane);
+			
+// Create tweet submission box
+$sbox = new GtkTextView();
+$sboxB = new GtkTextBuffer();
+$sbox->set_buffer($sboxB);
+$sbox->set_wrap_mode(Gtk::WRAP_WORD);
+$sbox->connect('key-press-event', 'on_key_press', $sbox, $sboxB);
+$vpane->add2($sbox);
 
 // Create new notebook (tabbed thingy)
 $tabs = new GtkNotebook();
 $tabs->set_tab_pos(Gtk::POS_LEFT);
-$vbox->pack_start($tabs);
+$vpane->add1($tabs);
 
 // Create page one, for normal timeline
 $label_p1 = new GtkLabel('Timeline');
@@ -136,6 +150,9 @@ $eventbox = new GtkEventBox();
 $eventbox->add($statusbar);
 $vbox->pack_start($eventbox, false, false);
 
+// Focus on tweet box
+$sbox->grab_focus();
+
 // Let the magic begin!
 $window->show_all();
 
@@ -145,8 +162,8 @@ if(isset($settings->oauth->accessToken)) {
 	$twitter = new Twitter(utf8_encode($settings->oauth->consumerToken), utf8_encode($settings->oauth->consumerSecret), utf8_encode($settings->oauth->accessToken), utf8_encode($settings->oauth->accessSecret));
 	// Run load_tweets() once when idle
 	$idle_id = Gtk::idle_add('load_tweets_first');
-	// And then every 5 minutes after that (when idle)
-	Gtk::timeout_add(300000, 'load_tweets');
+	// And then every 90 seconds after that (when idle)
+	Gtk::timeout_add(90000, 'load_tweets');
 }
 else {
 	// Charry needs to authenticate with Twitter first
@@ -318,16 +335,20 @@ function on_menu_select($item) {
 			// Set the display name option to 'screen_name' and save
 			$settings->ui->displayname = 'screen_name';
 			$settings->asXML(ABSPATH.'/settings.xml');
+			// Reload timeline to show changes
+			load_tweets();
 			break;
 		case "Real name":
-		// Set the display name option to 'name' and save
+			// Set the display name option to 'name' and save
 			$settings->ui->displayname = 'name';
 			$settings->asXML(ABSPATH.'/settings.xml');
+			// Reload timeline to show changes
+			load_tweets();
 	}
 }
 
 // Process tweet submission
-function on_key_press($widget, $event, $sbox, $sboxB, $tweets) {
+function on_key_press($widget, $event, $sbox, $sboxB) {
 	global $twitter, $statusbar;
 	// Did the user press Enter?
 	if($event->keyval == Gdk::KEY_Return) {
