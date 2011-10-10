@@ -31,7 +31,7 @@ class Twitter
 	/**#@-*/
 
 	/** @var int */
-	public static $cacheExpire = 1800; // 30 min
+	public static $cacheExpire = 300; // 5 min
 
 	/** @var OAuthSignatureMethod */
 	private $signatureMethod;
