@@ -184,10 +184,9 @@ function twitter_oAuth() {
 	$oauth = new TwitterOAuth(utf8_encode($settings->oauth->consumerToken), utf8_encode($settings->oauth->consumerSecret));
 	// Ask Twitter for request tokens so we can start authenticating
 	$request = $oauth->getRequestToken();
-	// Save the request tokens to our settings file
+	// Save the request tokens to XML
 	$settings->oauth->requestToken = $request['oauth_token'];
 	$settings->oauth->requestSecret = $request['oauth_token_secret'];
-	$settings->asXML(ABSPATH.'/settings.xml');
 	// Get an authentication URL from Twitter
 	$request_link = $oauth->getAuthorizeURL($request);
 	// Open browser
@@ -201,11 +200,10 @@ function twitter_oAuth() {
 			exec('open '.$request_link);
 			break;
 		default:
-			exec('xdg-open '.$request_link);
+			exec("xdg-open '".$request_link."' > /dev/null 2>&1 &");
 	}
 	// Open prompt for user to enter in the PIN from Twitter
-	$prompt = new Prompt('Enter PIN: ');
-	$input = $prompt->entry->get_text();
+	$input = gtk_prompt('Enter PIN: ');
 	// New TwitterOAuth object: this time with all the fixings
 	$oauth = new TwitterOAuth(utf8_encode($settings->oauth->consumerToken), utf8_encode($settings->oauth->consumerSecret), utf8_encode($settings->oauth->requestToken), utf8_encode($settings->oauth->requestSecret));
 	// Politely ask Twitter for an access token
@@ -213,10 +211,12 @@ function twitter_oAuth() {
 	// Yay, we got access tokens! :D
 	$settings->oauth->accessToken = $request['oauth_token'];
 	$settings->oauth->accessSecret = $request['oauth_token_secret'];
-	$settings->asXML(ABSPATH.'/settings.xml');
 	// Verify that we did everything right
 	$twitter = new Twitter(utf8_encode($settings->oauth->consumerToken), utf8_encode($settings->oauth->consumerSecret), utf8_encode($settings->oauth->accessToken), utf8_encode($settings->oauth->accessSecret));
 	if($twitter->authenticate()) {
+		// Save our settings, now that we know they're right
+		$settings->asXML(ABSPATH.'/settings.xml');
+		// Update statusbar
 		$statusbar->push($statusbar->get_context_id('fin'), 'Successfully authenticated with Twitter!');
 		// Update the UI
 		while(Gtk::events_pending()) {
@@ -394,37 +394,21 @@ function on_click_search($button, $entry) {
 	}
 }
 
-// Prompt class copied verbatim from the PHP-GTK Cookbook <http://www.kksou.com/php-gtk2>
-// May or may not work, not entirely sure
-class Prompt {
-	var $entry;
-	function Prompt($str) {
-		$dialog = new GtkDialog('Prompt', null, Gtk::DIALOG_MODAL);
-		$top_area = $dialog->vbox;
-		$top_area->pack_start($hbox = new GtkHBox());
-		$stock = GtkImage::new_from_stock(Gtk::STOCK_DIALOG_QUESTION, Gtk::ICON_SIZE_DIALOG);
-		$hbox->pack_start($stock, 0, 0);
-		$hbox->pack_start(new GtkLabel($str));
-		$this->entry = new GtkEntry();
-		$hbox->pack_start($this->entry, 0, 0);
-		$hbox->pack_start(new GtkLabel(' '), 0, 0);
-	
-		$dialog->add_button(Gtk::STOCK_OK, Gtk::RESPONSE_OK);
-	
-		$buttons = $dialog->action_area->get_children();
-		$button_ok = $buttons[0]; // get the ID of the OK button
-		// simulate button click when user press enter
-		$this->entry->connect('activate', array(&$this, 'on_enter'), $button_ok);
-	
-		$dialog->set_has_separator(false);
-		$dialog->show_all();
-		$dialog->run();
-		$dialog->destroy();
+// Makes prompts
+function gtk_prompt($str) {
+	$dialog = new GtkMessageDialog(null, 0, Gtk::MESSAGE_QUESTION, Gtk::BUTTONS_OK_CANCEL, $str);
+	$dialog->set_title('Prompt');
+	$entry = new GtkEntry();
+	$dialog->vbox->add($entry);
+	$dialog->show_all();
+	if($dialog->run() == Gtk::RESPONSE_CANCEL) {
+		$return = false;
 	}
-	
-	function on_enter($entry, $button) {
-		$button->clicked();
+	else {
+		$return = $entry->get_text();
 	}
+	$dialog->destroy();
+	return $return;
 }
 
 ?>
