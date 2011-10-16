@@ -236,7 +236,7 @@ function load_tweets_first() {
 }
 
 function load_tweets($search = null) {
-	global $twitter, $settings, $tweets, $idle_id, $first_run, $statusbar;
+	global $twitter, $window, $settings, $tweets, $idle_id, $statusbar;
 	// Tell the user that we're actually doing something!
 	$statusbar->push($statusbar->get_context_id('start'), 'Loading timeline...');
 	// Update the UI
@@ -283,14 +283,20 @@ function load_tweets($search = null) {
 		$name->set_alignment(0, 0);
 		$name_type = $settings->ui->displayname;
 		$name->set_markup('<b>'.utf8_decode($status->user->$name_type).'</b>');
-		// Make their tweet a GTK label, justified left, selectable, and wrapable.
-		$text = new GtkLabel();
-		$text->set_justify(Gtk::JUSTIFY_LEFT);
-		$text->set_alignment(0, 0);
-		$text->set_selectable(true);
-		$text->set_line_wrap(true);
+		// Get background color of the label, so we can camoflauge the TextView to look just like a label
+		$org_bg = $name->get_style()->bg[Gtk::STATE_PRELIGHT];
+		// Make their tweet a GTK TextView, masquerading as a Gtk label, not editable, without a cursor, and wrapping.
+		$text = new GtkTextView();
+		$textBuffer = new GtkTextBuffer();
+		$text->set_buffer($textBuffer);
+		$text->set_editable(false);
+		$text->set_cursor_visible(false);
+		$text->set_wrap_mode(Gtk::WRAP_WORD);
 		$text->set_size_request(300, -1);
-		$text->set_markup($twitter->clickable(utf8_decode($status->text)));
+		$text->modify_base(Gtk::STATE_NORMAL, $org_bg);
+		$textBuffer->insert($textBuffer->get_end_iter(), utf8_decode($status->text));
+		$textBuffer->connect('mark-set', 'on_tweet_mouseover');
+		clickableTweet($textBuffer, $status->text);
 		// Make the date and time a <small> GTK label, justified left and selectable.
 		$datetime = new GtkLabel();
 		$datetime->set_alignment(0, 0);
@@ -315,6 +321,24 @@ function load_tweets($search = null) {
 	// Update statusbar
 	$statusbar->push($statusbar->get_context_id('fin'), 'Loaded '.count($results).' tweets.');
 	return true;
+}
+
+function clickableTweet($buffer, $tweet) {
+	preg_match_all('~(?<!\w)(https?://\S+\w|www\.\S+\w|@\w+|#\w+)|[<>&]~u', $tweet, $matches);
+	$linktag = new GtkTextTag();
+	$linktag->set_property('foreground', '#0000ff');
+	$linktag->set_property('underline', Pango::UNDERLINE_SINGLE);
+	$tagtable = $buffer->get_tag_table();
+	$tagtable->add($linktag);
+	$start_iter = $buffer->get_start_iter();
+	$match_start = $start_iter;
+	$match_end = $buffer->get_end_iter();
+	$i = 0;
+	foreach($matches[$i] as $match) {
+		$search = $start_iter->forward_search($match, 0, $match_start, $match_end, null);
+		$buffer->apply_tag($linktag, $match_start, $match_end);
+		$i++;
+	}
 }
 
 // Do something if the user selects a menu item
@@ -379,6 +403,10 @@ function on_key_press($widget, $event, $sbox, $sboxB) {
 	else {
 		return false;
 	}
+}
+
+function on_tweet_mouseover($buffer, $textiter, $textmark) {
+	
 }
 
 // If the user presses Enter in a GtkEntry, perform a click action on the button to submit it
