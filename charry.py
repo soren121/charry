@@ -77,8 +77,13 @@ class Charry():
 		tweetscroll.set_policy(gtk.POLICY_AUTOMATIC, gtk.POLICY_AUTOMATIC)
 		# Create new vertical organizer for tweets
 		self.tweets = gtk.VBox(False, 10)
-		# Add tweets organizer to scrolling view
-		tweetscroll.add_with_viewport(self.tweets)
+		# Change color of the page to white
+		tweetview = gtk.Viewport()
+		color = tweetview.get_style()
+		tweetview.modify_bg(gtk.STATE_NORMAL, color.white)
+		# Add vertical organizer to scrolling window and viewport
+		tweetview.add(self.tweets)
+		tweetscroll.add(tweetview)
 		# Add this tab page to the notebook
 		tabs.append_page(tweetscroll, timeline)
 
@@ -141,17 +146,25 @@ class Charry():
 		return False
 		
 	def tweetFormat(self, tweet):
+		# Get tweet vertical organizer
 		tweets = self.tweets
 		
+		# Check to see if we've cached that user's avatar already
 		import os, urllib
 		if os.path.exists("cache/images/" + tweet.user.screen_name + ".cache") is not True:
+			# Retrieve avatar and save to cache/images/USERNAME.cache
 			urllib.urlretrieve(tweet.user.profile_image_url, "cache/images/" + tweet.user.screen_name + ".cache")
+		# Load avatar into GDK pixbuf at size 48x48
 		avatar_pb = gtk.gdk.pixbuf_new_from_file_at_size("cache/images/" + tweet.user.screen_name + ".cache", 48, 48)
+		# Make GTK image widget from GDK pixbuf
 		avatar = gtk.image_new_from_pixbuf(avatar_pb)
 		
-		name = gtk.Label(tweet.user.screen_name)
+		# Create Label for username
+		name = gtk.Label()
 		name.set_alignment(0, 0)
+		name.set_markup("<b>" + tweet.user.screen_name + "</b>")
 		
+		# Create TextView and disguise it as a label
 		text = gtk.TextView()
 		textbuffer = gtk.TextBuffer()
 		text.set_buffer(textbuffer)
@@ -161,6 +174,7 @@ class Charry():
 		text.set_size_request(300, -1)
 		textbuffer.insert(textbuffer.get_end_iter(), tweet.text)
 		
+		# Organize our elements
 		tweetbox = gtk.HBox()
 		tweetbox_inner = gtk.VBox()
 		tweetbox.pack_end(tweetbox_inner)
@@ -169,47 +183,69 @@ class Charry():
 		tweetbox_inner.pack_start(name, False, False)
 		tweetbox_inner.pack_start(text, False, False)
 		
-		self.tweets.pack_start(tweetbox)
-		self.tweets.show_all()
+		# Add tweet to tweets vertical organizer
+		tweets.pack_start(tweetbox)
+		# Show tweet
+		tweets.show_all()
 		
 		return
 
 	def initialTweets(self, auth):
+		# Load API
 		api = tweepy.API(auth)
+		# Display 20 tweets from the user's timeline
 		for tweet in api.home_timeline():
+			# Use tweetFormat() to format tweet nicely
 			self.tweetFormat(tweet)
+		# Tell GTK not to run this function this again
+		# Streaming API will take over from here
 		return False
 		
 	def streamTweets(self, auth):
+		# Import streaming functions
 		from tweepy.streaming import StreamListener, Stream
+		# Tell Tweepy how we want to handle things on the stream
 		class custom_listener(tweepy.StreamListener):
 			def on_status(self, status):
 				try:
-					self.tweetFormat(tweet)
+					# For statuses, run them through the tweet formatter
+					print tweet.text
 				except:
 					pass
 				return
+		# Initialize stream
 		stream = tweepy.Stream(auth = auth, listener = custom_listener(), timeout = 60)
+		# Start streaming from the user's timeline (in another thread, so we don't lock up the GUI)
 		stream.sample()
-		return False
+		return
 	
 	def gtkPrompt(self, name):
+		# Create new GTK dialog with all the fixings
 		prompt = gtk.MessageDialog(None, 0, gtk.MESSAGE_QUESTION, gtk.BUTTONS_OK_CANCEL, name)
+		# Set title of dialog
 		prompt.set_title("Prompt")
+		# Create and add entry box to dialog
 		entry = gtk.Entry()
 		prompt.vbox.add(entry)
+		# Show all widgets in prompt
 		prompt.show_all()
+		# Run dialog until user clicks OK or Cancel
 		if prompt.run() == gtk.RESPONSE_CANCEL:
+			# User cancelled dialog
 			rval = False
 		else:
+			# User clicked OK, grab text from entry box
 			rval = entry.get_text()
+		# Destory prompt
 		prompt.destroy()
+		# Give the good (or bad) news
 		return rval
 		
 	def load(self):
 		# Check if we've done OAuth login already
 		if self.settings.find("oauth/accessToken") is None:
 			print "no access token!"
+			# We don't have access tokens, let's ask Twitter for them
 			gtk.idle_add(self.oauth)
 		else:
 			print "access token found!"
@@ -221,15 +257,16 @@ class Charry():
 			auth = tweepy.OAuthHandler(consumerToken.text, consumerSecret.text)
 			auth.set_access_token(accessToken.text, accessSecret.text)
 			api = tweepy.API(auth)
+			# Check tokens
 			if api.verify_credentials():
 				# Load tweets
 				gtk.idle_add(self.initialTweets, auth)
+		# Return authentication handle so we can give it to streamTweets()
 		return auth
 
 # Initialize and load Charry
 charry = Charry()
 auth = charry.load()
-# Start streaming tweets
-#gtk.idle_add(charry.streamTweets, auth)
+#charry.streamTweets(auth)
 # Begin main GUI loop
 gtk.main()
