@@ -10,7 +10,8 @@
 ############################################
 
 import gtk
-import twitter
+import sys
+import tweepy
 from xml.etree.ElementTree import ElementTree, Element, SubElement
 
 class Charry():
@@ -102,40 +103,61 @@ class Charry():
 		self.window.show_all()
 
 	def oauth(self):
-		# Import Twitter OAuth and WebBrowser modules
-		import twitter.oauth_dance
+		# Import WebBrowser module
 		import webbrowser
 		# Pull the consumer token and token secret out of the XML
 		consumerToken = self.settings.find("oauth/consumerToken")
 		consumerSecret = self.settings.find("oauth/consumerSecret")
 		# Connect to the Twitter API without access tokens (because we don't have any yet)
-		twitterConnect = twitter.Twitter(auth = twitter.oauth.OAuth('', '', consumerToken.text, consumerSecret.text), format = '')
-		# Ask Twitter for request tokens
-		requestToken, requestSecret = twitter.oauth_dance.parse_oauth_tokens(twitterConnect.oauth.request_token())
-		# Create a URL to get our OAuth verifier key and open the browser
-		oauthURL = ("http://api.twitter.com/oauth/authorize?oauth_token=" + requestToken)
-		webbrowser.open(oauthURL, 2, True)
-		# Prompt the user for that OAuth verifier key
-		oauthVerifier = self.gtkPrompt("Enter PIN: ")
-		# Connect to the Twitter API again, this time using our request tokens
-		twitterConnect = twitter.Twitter(auth = twitter.oauth.OAuth(requestToken, requestSecret, consumerToken.text, consumerSecret.text), format = '')
-		# Ask for access tokens
-		accessToken, accessSecret = twitter.oauth_dance.parse_oauth_tokens(twitterConnect.oauth.access_token(oauthverifier = oauthVerifier))
-		# Make sure everything checks out before we save our shiny new access tokens ;)
-		if twitterConnect.account.verify_credentials():
+		auth = tweepy.OAuthHandler(consumerToken.text, consumerSecret.text)
+		# Try to get the authorization URL we need to get the verifier token
+		try:
+			redirect = auth.get_authorization_url()
+		except tweepy.TweepError:
+			print "Error! Failed to get request token."
+		# Open a web browser to show the user the verifier token
+		webbrowser.open(redirect, 2, True)
+		# Ask the user for the verifier token
+		verifier = self.gtkPrompt("Enter PIN: ")
+		# Give Twitter its verifier token back in exchange for access tokens
+		try:
+			auth.get_access_token(verifier)
+		except tweepy.TweepError:
+			print "Error! Failed to get access token."
+		# Plug the access tokens in and verify that everything's correct
+		auth.set_access_token(auth.access_token.key, auth.access_token.secret)
+		api = tweepy.API(auth)
+		if api.verify_credentials():
 			# Save access tokens to XML
 			xml_oauth = self.settings.find("oauth")
 			xml_accessToken = SubElement(xml_oauth, "accessToken")
-			xml_accessToken.text = accessToken
+			xml_accessToken.text = auth.access_token.key
 			xml_accessSecret = SubElement(xml_oauth, "accessSecret")
-			xml_accessSecret.text = accessSecret
+			xml_accessSecret.text = auth.access_token.secret
 			self.settings.write("settings.xml")
 			# Load tweets!
 			self.loadtweets()
+		else:
+			print "Error! OAuth credentials are incorrect."
 		return False
 
 	def loadtweets(self):
-		print "not done!"
+		class listener(tweepy.StreamListener):
+			def on_status(self, status):
+				try:
+					print status.author.screen_name + status.text
+				except Exception, e:
+					print >> sys.stderr, 'Encoutnered Exception:', e
+					pass
+			
+			def on_error(self, status_code):
+				print >> sys.stderr, 'Encountered Exception:', status_code
+				return True
+			
+			def on_timeout(self):
+				print >> sys.stderr, 'Timeout...'
+				return True
+		streaming = tweepy.streaming.Stream(self.auth, listener(), timeout = 60)
 		return False
 	
 	def gtkPrompt(self, name):
@@ -158,6 +180,15 @@ class Charry():
 			gtk.idle_add(self.oauth)
 		else:
 			print "access token found!"
+			# Connect to the Twitter API
+			consumerToken = self.settings.find("oauth/consumerToken")
+			consumerSecret = self.settings.find("oauth/consumerSecret")
+			accessToken = self.settings.find("oauth/accessToken")
+			accessSecret = self.settings.find("oauth/accessSecret")
+			self.auth = tweepy.OAuthHandler(consumerToken.text, consumerSecret.text)
+			self.auth.set_access_token(accessToken, accessSecret)
+			self.api = tweepy.API(self.auth)
+			# Load tweets
 			gtk.idle_add(self.loadtweets)
 
 # Initialize and load Charry		
