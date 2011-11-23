@@ -1,4 +1,4 @@
-#!/usr/bin/python2
+#!/usr/bin/env python
 
 ############################################
 ##
@@ -10,7 +10,6 @@
 ############################################
 
 import gtk
-import sys
 import tweepy
 from xml.etree.ElementTree import ElementTree, Element, SubElement
 
@@ -140,24 +139,58 @@ class Charry():
 		else:
 			print "Error! OAuth credentials are incorrect."
 		return False
+		
+	def tweetFormat(self, tweet):
+		tweets = self.tweets
+		
+		import os, urllib
+		if os.path.exists("cache/images/" + tweet.user.screen_name + ".cache") is not True:
+			urllib.urlretrieve(tweet.user.profile_image_url, "cache/images/" + tweet.user.screen_name + ".cache")
+		avatar_pb = gtk.gdk.pixbuf_new_from_file_at_size("cache/images/" + tweet.user.screen_name + ".cache", 48, 48)
+		avatar = gtk.image_new_from_pixbuf(avatar_pb)
+		
+		name = gtk.Label(tweet.user.screen_name)
+		name.set_alignment(0, 0)
+		
+		text = gtk.TextView()
+		textbuffer = gtk.TextBuffer()
+		text.set_buffer(textbuffer)
+		text.set_editable(False)
+		text.set_cursor_visible(False)
+		text.set_wrap_mode(gtk.WRAP_WORD)
+		text.set_size_request(300, -1)
+		textbuffer.insert(textbuffer.get_end_iter(), tweet.text)
+		
+		tweetbox = gtk.HBox()
+		tweetbox_inner = gtk.VBox()
+		tweetbox.pack_end(tweetbox_inner)
+		tweetbox.set_size_request(370, -1)
+		tweetbox.pack_start(avatar)
+		tweetbox_inner.pack_start(name, False, False)
+		tweetbox_inner.pack_start(text, False, False)
+		
+		self.tweets.pack_start(tweetbox)
+		self.tweets.show_all()
+		
+		return
 
-	def loadtweets(self):
-		class listener(tweepy.StreamListener):
+	def initialTweets(self, auth):
+		api = tweepy.API(auth)
+		for tweet in api.home_timeline():
+			self.tweetFormat(tweet)
+		return False
+		
+	def streamTweets(self, auth):
+		from tweepy.streaming import StreamListener, Stream
+		class custom_listener(tweepy.StreamListener):
 			def on_status(self, status):
 				try:
-					print status.author.screen_name + status.text
-				except Exception, e:
-					print >> sys.stderr, 'Encoutnered Exception:', e
+					self.tweetFormat(tweet)
+				except:
 					pass
-			
-			def on_error(self, status_code):
-				print >> sys.stderr, 'Encountered Exception:', status_code
-				return True
-			
-			def on_timeout(self):
-				print >> sys.stderr, 'Timeout...'
-				return True
-		streaming = tweepy.streaming.Stream(self.auth, listener(), timeout = 60)
+				return
+		stream = tweepy.Stream(auth = auth, listener = custom_listener(), timeout = 60)
+		stream.sample()
 		return False
 	
 	def gtkPrompt(self, name):
@@ -185,14 +218,18 @@ class Charry():
 			consumerSecret = self.settings.find("oauth/consumerSecret")
 			accessToken = self.settings.find("oauth/accessToken")
 			accessSecret = self.settings.find("oauth/accessSecret")
-			self.auth = tweepy.OAuthHandler(consumerToken.text, consumerSecret.text)
-			self.auth.set_access_token(accessToken, accessSecret)
-			self.api = tweepy.API(self.auth)
-			# Load tweets
-			gtk.idle_add(self.loadtweets)
+			auth = tweepy.OAuthHandler(consumerToken.text, consumerSecret.text)
+			auth.set_access_token(accessToken.text, accessSecret.text)
+			api = tweepy.API(auth)
+			if api.verify_credentials():
+				# Load tweets
+				gtk.idle_add(self.initialTweets, auth)
+		return auth
 
-# Initialize and load Charry		
+# Initialize and load Charry
 charry = Charry()
-charry.load()
+auth = charry.load()
+# Start streaming tweets
+#gtk.idle_add(charry.streamTweets, auth)
 # Begin main GUI loop
 gtk.main()
