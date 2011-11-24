@@ -15,39 +15,7 @@ from urllib import urlretrieve
 from dateutil.parser import parse
 from dateutil.tz import tzlocal
 gtk.gdk.threads_init()
-
-# Threading class written by Ali Afshar
-# http://unpythonic.blogspot.com/2007/08/using-threads-in-pygtk.html
-# No license specified, so I'll just say this: many thanks to you, Ali!
-class GeneratorTask(object):
-   def __init__(self, generator, loop_callback, complete_callback=None):
-       self.generator = generator
-       self.loop_callback = loop_callback
-       self.complete_callback = complete_callback
-
-   def _start(self, *args, **kwargs):
-       import gobject
-       self._stopped = False
-       for ret in self.generator(*args, **kwargs):
-           if self._stopped:
-               thread.exit()
-           gobject.idle_add(self._loop, ret)
-       if self.complete_callback is not None:
-           gobject.idle_add(self.complete_callback)
-
-   def _loop(self, ret):
-       if ret is None:
-           ret = ()
-       if not isinstance(ret, tuple):
-           ret = (ret,)
-       self.loop_callback(*ret)
-
-   def start(self, *args, **kwargs):
-       threading.Thread(target=self._start, args=args, kwargs=kwargs).start()
-
-   def stop(self):
-       self._stopped = True
-
+	
 class Charry():
 	def __init__(self):
 		# Create window
@@ -55,7 +23,7 @@ class Charry():
 		# Set title, size, and action for close button
 		self.window.set_title("Charry")
 		self.window.set_size_request(430, 600)
-		self.window.connect("destroy", self.exit)
+		self.window.connect("destroy", self.quit)
 		
 		# Open settings XML
 		self.settings = ElementTree()
@@ -87,7 +55,7 @@ class Charry():
 		# Make Exit item for Charry menu
 		miexit = gtk.MenuItem("Exit")
 		# Connect item to exit action
-		miexit.connect("activate", self.exit)
+		miexit.connect("activate", self.quit)
 		# Add to Charry menu
 		mcharry.append(miexit)
 
@@ -198,21 +166,19 @@ class Charry():
 		name.set_selectable(True)
 		name.set_markup("<b>" + tweet.user.screen_name + "</b>")
 		
-		# Create TextView and disguise it as a label
-		text = gtk.TextView()
-		textbuffer = gtk.TextBuffer()
-		text.set_buffer(textbuffer)
-		text.set_editable(False)
-		text.set_cursor_visible(False)
-		text.set_wrap_mode(gtk.WRAP_WORD)
+		# Create Label for tweet text
+		text = gtk.Label(tweet.text)
+		text.set_alignment(0, 0)
+		text.set_selectable(True)
+		text.set_justify(gtk.JUSTIFY_LEFT)
+		text.set_line_wrap(True)
 		text.set_size_request(300, -1)
-		textbuffer.insert(textbuffer.get_end_iter(), tweet.text)
 		
 		# Create Label for date/time
 		timedate = gtk.Label()
-		timedate.set_alignment(-1, 0)
+		timedate.set_alignment(0, 0)
 		timedate.set_selectable(True)
-		timedate_str = parse(str(tweet.created_at) + " +0000").astimezone(tzlocal()).strftime(" %I:%M %p on %A, %b %d").replace(" 0", "")
+		timedate_str = parse(str(tweet.created_at) + " +0000").astimezone(tzlocal()).strftime("X%I:%M %p on %A, %b X%d").replace("X0", "").replace("X", "")
 		timedate.set_markup("<small>" + timedate_str + "</small>")
 		
 		# Organize our elements
@@ -255,10 +221,9 @@ class Charry():
 			# Use tweetFormat() to format tweet nicely
 			self.tweetFormat(tweet)
 		# Initialize stream
-		stream = tweepy.streaming.Stream(auth = auth, listener = self.tweetListener(self.tweetFormat), timeout = 60)
+		self.stream = tweepy.streaming.Stream(auth = auth, listener = self.tweetListener(self.tweetFormat), timeout = 60)
 		# Start streaming from the user's timeline (in another thread, so we don't lock up the GUI)
-		self.tweetThread = GeneratorTask(stream.userstream, None)
-		self.tweetThread.start()
+		self.stream.userstream(async = True)
 		# Update UI so it doesn't remain frozen
 		while gtk.events_pending():
 			gtk.main_iteration()
@@ -321,8 +286,8 @@ class Charry():
 				self.streamTweets(auth)
 		return
 
-	def exit(self, object):
-		self.tweetThread.stop()
+	def quit(self, object):
+		self.stream.disconnect()
 		gtk.main_quit()
 
 # Initialize and load Charry
