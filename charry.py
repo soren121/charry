@@ -9,9 +9,42 @@
 ##
 ############################################
 
-import gtk
-import tweepy
+import threading, thread, gtk, tweepy
 from xml.etree.ElementTree import ElementTree, Element, SubElement
+from dateutil.parser import parse
+gtk.gdk.threads_init()
+
+# Threading class written by Ali Afshar
+# http://unpythonic.blogspot.com/2007/08/using-threads-in-pygtk.html
+# No license specified, so I'll just say this: many thanks to you, Ali!
+class GeneratorTask(object):
+   def __init__(self, generator, loop_callback, complete_callback=None):
+       self.generator = generator
+       self.loop_callback = loop_callback
+       self.complete_callback = complete_callback
+
+   def _start(self, *args, **kwargs):
+       import gobject
+       self._stopped = False
+       for ret in self.generator(*args, **kwargs):
+           if self._stopped:
+               thread.exit()
+           gobject.idle_add(self._loop, ret)
+       if self.complete_callback is not None:
+           gobject.idle_add(self.complete_callback)
+
+   def _loop(self, ret):
+       if ret is None:
+           ret = ()
+       if not isinstance(ret, tuple):
+           ret = (ret,)
+       self.loop_callback(*ret)
+
+   def start(self, *args, **kwargs):
+       threading.Thread(target=self._start, args=args, kwargs=kwargs).start()
+
+   def stop(self):
+       self._stopped = True
 
 class Charry():
 	def __init__(self):
@@ -20,7 +53,7 @@ class Charry():
 		# Set title, size, and action for close button
 		self.window.set_title("Charry")
 		self.window.set_size_request(430, 600)
-		self.window.connect("destroy", gtk.main_quit)
+		self.window.connect("destroy", self.exit)
 		
 		# Open settings XML
 		self.settings = ElementTree()
@@ -52,7 +85,7 @@ class Charry():
 		# Make Exit item for Charry menu
 		miexit = gtk.MenuItem("Exit")
 		# Connect item to exit action
-		miexit.connect("activate", gtk.main_quit)
+		miexit.connect("activate", self.exit)
 		# Add to Charry menu
 		mcharry.append(miexit)
 
@@ -145,14 +178,12 @@ class Charry():
 			print "Error! OAuth credentials are incorrect."
 		return False
 		
-	def tweetFormat(self, tweet):
-		# Get tweet vertical organizer
-		tweets = self.tweets
-		
+	def tweetFormat(self, tweet, streaming = False):		
 		# Check to see if we've cached that user's avatar already
-		import os, urllib
-		if os.path.exists("cache/images/" + tweet.user.screen_name + ".cache") is not True:
+		import os
+		if not os.path.exists("cache/images/" + tweet.user.screen_name + ".cache"):
 			# Retrieve avatar and save to cache/images/USERNAME.cache
+			import urllib
 			urllib.urlretrieve(tweet.user.profile_image_url, "cache/images/" + tweet.user.screen_name + ".cache")
 		# Load avatar into GDK pixbuf at size 48x48
 		avatar_pb = gtk.gdk.pixbuf_new_from_file_at_size("cache/images/" + tweet.user.screen_name + ".cache", 48, 48)
@@ -162,6 +193,7 @@ class Charry():
 		# Create Label for username
 		name = gtk.Label()
 		name.set_alignment(0, 0)
+		name.set_selectable(True)
 		name.set_markup("<b>" + tweet.user.screen_name + "</b>")
 		
 		# Create TextView and disguise it as a label
@@ -174,6 +206,12 @@ class Charry():
 		text.set_size_request(300, -1)
 		textbuffer.insert(textbuffer.get_end_iter(), tweet.text)
 		
+		# Create Label for date/time
+		timedate = gtk.Label()
+		timedate.set_alignment(0, 0)
+		timedate.set_selectable(True)
+		timedate.set_markup("<small>" + parse(str(tweet.created_at)).strftime("%A, %b %e, %G at %l:%M %p") + "</small>")
+		
 		# Organize our elements
 		tweetbox = gtk.HBox()
 		tweetbox_inner = gtk.VBox()
@@ -182,43 +220,47 @@ class Charry():
 		tweetbox.pack_start(avatar)
 		tweetbox_inner.pack_start(name, False, False)
 		tweetbox_inner.pack_start(text, False, False)
+		tweetbox_inner.pack_start(timedate, False, False)
 		
 		# Add tweet to tweets vertical organizer
-		tweets.pack_start(tweetbox)
+		self.tweets.pack_start(tweetbox)
+		# If this tweet is streaming, let's put it at the top, because we know it's the newest
+		if streaming is True:
+			self.tweets.reorder_child(tweetbox, 0)
 		# Show tweet
-		tweets.show_all()
+		self.tweets.show_all()
 		
-		return
-
-	def initialTweets(self, auth):
+		return tweet
+		
+	class tweetListener(tweepy.streaming.StreamListener):
+		def __init__(self, tweetFormat):
+			tweepy.streaming.StreamListener.__init__(self)
+			self.tweetFormat = tweetFormat
+		def on_status(self, tweet):
+			try:
+				val = self.tweetFormat(tweet, True)
+				print val
+			except:
+				pass
+			return True		
+		
+	def streamTweets(self, auth):
 		# Load API
 		api = tweepy.API(auth)
 		# Display 20 tweets from the user's timeline
 		for tweet in api.home_timeline():
 			# Use tweetFormat() to format tweet nicely
 			self.tweetFormat(tweet)
-		# Tell GTK not to run this function this again
-		# Streaming API will take over from here
-		return False
-		
-	def streamTweets(self, auth):
-		# Import streaming functions
-		from tweepy.streaming import StreamListener, Stream
-		# Tell Tweepy how we want to handle things on the stream
-		class custom_listener(tweepy.StreamListener):
-			def on_status(self, status):
-				try:
-					# For statuses, run them through the tweet formatter
-					print tweet.text
-				except:
-					pass
-				return
 		# Initialize stream
-		stream = tweepy.Stream(auth = auth, listener = custom_listener(), timeout = 60)
+		stream = tweepy.streaming.Stream(auth = auth, listener = self.tweetListener(self.tweetFormat), timeout = 60)
 		# Start streaming from the user's timeline (in another thread, so we don't lock up the GUI)
-		stream.sample()
+		self.tweetThread = GeneratorTask(stream.userstream, None)
+		self.tweetThread.start()
+		# Update UI so it doesn't remain frozen
+		while gtk.events_pending():
+			gtk.main_iteration()
 		return
-	
+
 	def gtkPrompt(self, name):
 		# Create new GTK dialog with all the fixings
 		prompt = gtk.MessageDialog(None, 0, gtk.MESSAGE_QUESTION, gtk.BUTTONS_OK_CANCEL, name)
@@ -260,13 +302,16 @@ class Charry():
 			# Check tokens
 			if api.verify_credentials():
 				# Load tweets
-				gtk.idle_add(self.initialTweets, auth)
-		# Return authentication handle so we can give it to streamTweets()
-		return auth
+				self.streamTweets(auth)
+		return
+
+	def exit(self, object):
+		self.tweetThread.stop()
+		gtk.main_quit()
 
 # Initialize and load Charry
 charry = Charry()
-auth = charry.load()
-#charry.streamTweets(auth)
+charry.load()
+
 # Begin main GUI loop
 gtk.main()
