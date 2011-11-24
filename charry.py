@@ -11,7 +11,9 @@
 
 import threading, thread, gtk, tweepy
 from xml.etree.ElementTree import ElementTree, Element, SubElement
+from urllib import urlretrieve
 from dateutil.parser import parse
+from dateutil.tz import tzlocal
 gtk.gdk.threads_init()
 
 # Threading class written by Ali Afshar
@@ -125,6 +127,7 @@ class Charry():
 		sboxb = gtk.TextBuffer()
 		sbox.set_buffer(sboxb)
 		sbox.set_wrap_mode(gtk.WRAP_WORD)
+		sbox.connect("key-press-event", self.tweetSubmit, sboxb)
 		vpane.add2(sbox)
 
 		# Create statusbar
@@ -183,8 +186,7 @@ class Charry():
 		import os
 		if not os.path.exists("cache/images/" + tweet.user.screen_name + ".cache"):
 			# Retrieve avatar and save to cache/images/USERNAME.cache
-			import urllib
-			urllib.urlretrieve(tweet.user.profile_image_url, "cache/images/" + tweet.user.screen_name + ".cache")
+			urlretrieve(tweet.user.profile_image_url, "cache/images/" + tweet.user.screen_name + ".cache")
 		# Load avatar into GDK pixbuf at size 48x48
 		avatar_pb = gtk.gdk.pixbuf_new_from_file_at_size("cache/images/" + tweet.user.screen_name + ".cache", 48, 48)
 		# Make GTK image widget from GDK pixbuf
@@ -208,9 +210,10 @@ class Charry():
 		
 		# Create Label for date/time
 		timedate = gtk.Label()
-		timedate.set_alignment(0, 0)
+		timedate.set_alignment(-1, 0)
 		timedate.set_selectable(True)
-		timedate.set_markup("<small>" + parse(str(tweet.created_at)).strftime("%A, %b %e, %G at %l:%M %p") + "</small>")
+		timedate_str = parse(str(tweet.created_at) + " +0000").astimezone(tzlocal()).strftime(" %I:%M %p on %A, %b %d").replace(" 0", "")
+		timedate.set_markup("<small>" + timedate_str + "</small>")
 		
 		# Organize our elements
 		tweetbox = gtk.HBox()
@@ -223,7 +226,7 @@ class Charry():
 		tweetbox_inner.pack_start(timedate, False, False)
 		
 		# Add tweet to tweets vertical organizer
-		self.tweets.pack_start(tweetbox)
+		self.tweets.pack_start(tweetbox, padding = 3)
 		# If this tweet is streaming, let's put it at the top, because we know it's the newest
 		if streaming is True:
 			self.tweets.reorder_child(tweetbox, 0)
@@ -283,6 +286,19 @@ class Charry():
 		# Give the good (or bad) news
 		return rval
 		
+	def tweetSubmit(self, widget, event, sboxb):
+		if event.keyval == gtk.gdk.keyval_from_name('Return'):
+			if not (event.state and gtk.gdk.SHIFT_MASK):
+				tweet = sboxb.get_text(sboxb.get_start_iter(), sboxb.get_end_iter())
+				if len(tweet) > 0 and len(tweet) <= 140:
+					self.api.update_status(tweet)
+					sboxb.set_text('')
+					return True
+			else:
+				return False
+		else:
+			return False
+		
 	def load(self):
 		# Check if we've done OAuth login already
 		if self.settings.find("oauth/accessToken") is None:
@@ -298,9 +314,9 @@ class Charry():
 			accessSecret = self.settings.find("oauth/accessSecret")
 			auth = tweepy.OAuthHandler(consumerToken.text, consumerSecret.text)
 			auth.set_access_token(accessToken.text, accessSecret.text)
-			api = tweepy.API(auth)
+			self.api = tweepy.API(auth)
 			# Check tokens
-			if api.verify_credentials():
+			if self.api.verify_credentials():
 				# Load tweets
 				self.streamTweets(auth)
 		return
