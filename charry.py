@@ -9,7 +9,7 @@
 ##
 ############################################
 
-import threading, thread, gtk, tweepy
+import threading, thread, gtk, tweepy, re
 from xml.etree.ElementTree import ElementTree, Element, SubElement
 from urllib import urlretrieve
 from dateutil.parser import parse
@@ -166,13 +166,20 @@ class Charry():
 		name.set_selectable(True)
 		name.set_markup("<b>" + tweet.user.screen_name + "</b>")
 		
+		# Use regexes to link URLs, hashtags, and usernames
+		urlregex = re.compile("(http[s]?://(?:[a-zA-Z]|[0-9]|[$-_@.&+]|[!*(),]|(?:%[0-9a-fA-F][0-9a-fA-F]))+)", re.IGNORECASE)
+		linked = urlregex.sub(r'<a href="\1">\1</a>', tweet.text)
+		linked = re.sub(r'(\A|\s)@(\w+)', r'\1<a href="http://www.twitter.com/\2">@\2</a>', linked)
+		linked = re.sub(r'(\A|\s)#(\w+)', r'\1<a href="http://search.twitter.com/search?q=%23\2">#\2</a>', linked)
+		
 		# Create Label for tweet text
-		text = gtk.Label(tweet.text)
+		text = gtk.Label()
 		text.set_alignment(0, 0)
 		text.set_selectable(True)
 		text.set_justify(gtk.JUSTIFY_LEFT)
 		text.set_line_wrap(True)
 		text.set_size_request(300, -1)
+		text.set_markup(linked)
 		
 		# Create Label for date/time
 		timedate = gtk.Label()
@@ -180,7 +187,7 @@ class Charry():
 		timedate.set_selectable(True)
 		timedate_str = parse(str(tweet.created_at) + " +0000").astimezone(tzlocal()).strftime("X%I:%M %p on %A, %b X%d").replace("X0", "").replace("X", "")
 		timedate.set_markup("<small>" + timedate_str + "</small>")
-		
+
 		# Organize our elements
 		tweetbox = gtk.HBox()
 		tweetbox_inner = gtk.VBox()
