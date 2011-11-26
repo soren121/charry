@@ -72,7 +72,7 @@ class Charry():
 		# Add notebook to vertical pane split
 		vpane.add1(tabs)
 
-		# Create tab page one
+		# Create tab page one (timeline)
 		timeline = gtk.Label("Timeline")
 		timeline.set_angle(90)
 		# Create scrolling view
@@ -89,6 +89,41 @@ class Charry():
 		tweetscroll.add(tweetview)
 		# Add this tab page to the notebook
 		tabs.append_page(tweetscroll, timeline)
+		
+		# Create tab page two (search)
+		search = gtk.Label("Search")
+		search.set_angle(90)
+		# Create organizers
+		search_vbox = gtk.VBox()
+		search_hbox = gtk.HBox()
+		# Create widgets
+		search_text = gtk.Label("Search terms: ")
+		search_entry = gtk.Entry()
+		search_button = gtk.Button(stock = gtk.STOCK_OK)
+		# Link widgets to signals
+		search_entry.connect("activate", self.on_enter, search_button)
+		search_button.connect("clicked", self.searchTweets, search_entry)
+		# Pack widgets into horizontal organizer
+		search_hbox.pack_start(search_text, False, False)
+		search_hbox.pack_start(search_entry, True, True)
+		search_hbox.pack_start(search_button, False, False)
+		# Create scrolled window for tweets
+		search_scroll = gtk.ScrolledWindow()
+		search_scroll.set_policy(gtk.POLICY_AUTOMATIC, gtk.POLICY_AUTOMATIC)
+		# Create vertical organizer for tweets
+		self.search = gtk.VBox(False, 10)
+		# Change color of the page to white
+		searchview = gtk.Viewport()
+		color = searchview.get_style()
+		searchview.modify_bg(gtk.STATE_NORMAL, color.white)
+		# Add tweet vertical organizer to scrolling window and viewport
+		searchview.add(self.search)
+		search_scroll.add(searchview)
+		# Add scrolled window to search vbox
+		search_vbox.pack_start(search_hbox, False, False)
+		search_vbox.pack_start(search_scroll, True, True)
+		# Add tab page to Notebook
+		tabs.append_page(search_vbox, search)
 
 		# Create tweet submission box
 		sbox = gtk.TextView()
@@ -149,14 +184,24 @@ class Charry():
 			print "Error! OAuth credentials are incorrect."
 		return False
 		
-	def tweetFormat(self, tweet, streaming = False):		
+	def tweetFormat(self, tweet, type = "normal"):
+		# Search compatibility
+		if type is "search":
+			screen_name = tweet.from_user
+			profile_image_url = tweet.profile_image_url
+			tweets = self.search
+		else:
+			screen_name = tweet.user.screen_name
+			profile_image_url = tweet.user.profile_image_url
+			tweets = self.tweets
+	
 		# Check to see if we've cached that user's avatar already
 		import os
-		if not os.path.exists("cache/images/" + tweet.user.screen_name + ".cache"):
+		if not os.path.exists("cache/images/" + screen_name + ".cache"):
 			# Retrieve avatar and save to cache/images/USERNAME.cache
-			urlretrieve(tweet.user.profile_image_url, "cache/images/" + tweet.user.screen_name + ".cache")
+			urlretrieve(profile_image_url, "cache/images/" + screen_name + ".cache")
 		# Load avatar into GDK pixbuf at size 48x48
-		avatar_pb = gtk.gdk.pixbuf_new_from_file_at_size("cache/images/" + tweet.user.screen_name + ".cache", 48, 48)
+		avatar_pb = gtk.gdk.pixbuf_new_from_file_at_size("cache/images/" + screen_name + ".cache", 48, 48)
 		# Make GTK image widget from GDK pixbuf
 		avatar = gtk.image_new_from_pixbuf(avatar_pb)
 		
@@ -164,7 +209,7 @@ class Charry():
 		name = gtk.Label()
 		name.set_alignment(0, 0)
 		name.set_selectable(True)
-		name.set_markup("<b>" + tweet.user.screen_name + "</b>")
+		name.set_markup("<b>" + screen_name + "</b>")
 		
 		# Use regexes to link URLs, hashtags, and usernames
 		urlregex = re.compile("(http[s]?://(?:[a-zA-Z]|[0-9]|[$-_@.&+]|[!*(),]|(?:%[0-9a-fA-F][0-9a-fA-F]))+)", re.IGNORECASE)
@@ -199,12 +244,12 @@ class Charry():
 		tweetbox_inner.pack_start(timedate, False, False)
 		
 		# Add tweet to tweets vertical organizer
-		self.tweets.pack_start(tweetbox, padding = 3)
+		tweets.pack_start(tweetbox, padding = 3)
 		# If this tweet is streaming, let's put it at the top, because we know it's the newest
-		if streaming is True:
-			self.tweets.reorder_child(tweetbox, 0)
+		if type is "streaming":
+			tweets.reorder_child(tweetbox, 0)
 		# Show tweet
-		self.tweets.show_all()
+		tweets.show_all()
 		
 		return tweet
 		
@@ -214,17 +259,15 @@ class Charry():
 			self.tweetFormat = tweetFormat
 		def on_status(self, tweet):
 			try:
-				val = self.tweetFormat(tweet, True)
+				val = self.tweetFormat(tweet, "streaming")
 				print val
 			except:
 				pass
 			return True		
 		
 	def streamTweets(self, auth):
-		# Load API
-		api = tweepy.API(auth)
 		# Display 20 tweets from the user's timeline
-		for tweet in api.home_timeline():
+		for tweet in self.api.home_timeline():
 			# Use tweetFormat() to format tweet nicely
 			self.tweetFormat(tweet)
 		# Initialize stream
@@ -235,6 +278,25 @@ class Charry():
 		while gtk.events_pending():
 			gtk.main_iteration()
 		return
+		
+	def searchTweets(self, button, entry):
+		q = entry.get_text()
+		if q is not "":
+			for tweet in self.api.search(q):
+				self.tweetFormat(tweet, "search")
+		
+	def tweetSubmit(self, widget, event, sboxb):
+		if event.keyval == gtk.gdk.keyval_from_name('Return'):
+			if not (event.state and gtk.gdk.SHIFT_MASK):
+				tweet = sboxb.get_text(sboxb.get_start_iter(), sboxb.get_end_iter())
+				if len(tweet) > 0 and len(tweet) <= 140:
+					self.api.update_status(tweet)
+					sboxb.set_text('')
+					return True
+			else:
+				return False
+		else:
+			return False		
 
 	def gtkPrompt(self, name):
 		# Create new GTK dialog with all the fixings
@@ -258,18 +320,8 @@ class Charry():
 		# Give the good (or bad) news
 		return rval
 		
-	def tweetSubmit(self, widget, event, sboxb):
-		if event.keyval == gtk.gdk.keyval_from_name('Return'):
-			if not (event.state and gtk.gdk.SHIFT_MASK):
-				tweet = sboxb.get_text(sboxb.get_start_iter(), sboxb.get_end_iter())
-				if len(tweet) > 0 and len(tweet) <= 140:
-					self.api.update_status(tweet)
-					sboxb.set_text('')
-					return True
-			else:
-				return False
-		else:
-			return False
+	def on_enter(self, entry, button):
+		button.clicked()
 		
 	def load(self):
 		# Check if we've done OAuth login already
