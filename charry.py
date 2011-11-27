@@ -214,7 +214,6 @@ class Charry():
 		# Create Label for username
 		name = gtk.Label()
 		name.set_alignment(0, 0)
-		name.set_selectable(True)
 		name.set_markup("<b>" + screen_name + "</b>")
 		
 		# Use regexes to link URLs, hashtags, and usernames
@@ -289,6 +288,9 @@ class Charry():
 		
 	def searchTweets(self, button, entry):
 		q = entry.get_text()
+		# Clear search container
+		for tweet in self.search.get_children():
+			tweet.destroy()
 		if q is not "":
 			for tweet in self.api.search(q):
 				self.tweetFormat(tweet, "search")
