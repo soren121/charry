@@ -9,7 +9,7 @@
 ##
 ############################################
 
-import threading, thread, gtk, tweepy, re
+import threading, thread, gtk, tweepy, re, webbrowser
 from xml.etree.ElementTree import ElementTree, Element, SubElement
 from urllib import urlretrieve
 from dateutil.parser import parse
@@ -67,10 +67,10 @@ class Charry():
 		vbox.pack_start(vpane)	
 
 		# Create notebook (tabbed thingy)
-		tabs = gtk.Notebook()
-		tabs.set_tab_pos(gtk.POS_LEFT)
+		self.tabs = gtk.Notebook()
+		self.tabs.set_tab_pos(gtk.POS_LEFT)
 		# Add notebook to vertical pane split
-		vpane.add1(tabs)
+		vpane.add1(self.tabs)
 
 		# Create tab page one (timeline)
 		timeline = gtk.Label("Timeline")
@@ -88,7 +88,7 @@ class Charry():
 		tweetview.add(self.tweets)
 		tweetscroll.add(tweetview)
 		# Add this tab page to the notebook
-		tabs.append_page(tweetscroll, timeline)
+		self.tabs.append_page(tweetscroll, timeline)
 		
 		# Create tab page two (search)
 		search = gtk.Label("Search")
@@ -98,14 +98,14 @@ class Charry():
 		search_hbox = gtk.HBox()
 		# Create widgets
 		search_text = gtk.Label("Search terms: ")
-		search_entry = gtk.Entry()
+		self.search_entry = gtk.Entry()
 		search_button = gtk.Button(stock = gtk.STOCK_OK)
 		# Link widgets to signals
-		search_entry.connect("activate", self.on_enter, search_button)
-		search_button.connect("clicked", self.searchTweets, search_entry)
+		self.search_entry.connect("activate", self.on_enter, search_button)
+		search_button.connect("clicked", self.searchTweets, self.search_entry)
 		# Pack widgets into horizontal organizer
 		search_hbox.pack_start(search_text, False, False)
-		search_hbox.pack_start(search_entry, True, True)
+		search_hbox.pack_start(self.search_entry, True, True)
 		search_hbox.pack_start(search_button, False, False)
 		# Create scrolled window for tweets
 		search_scroll = gtk.ScrolledWindow()
@@ -123,7 +123,7 @@ class Charry():
 		search_vbox.pack_start(search_hbox, False, False)
 		search_vbox.pack_start(search_scroll, True, True)
 		# Add tab page to Notebook
-		tabs.append_page(search_vbox, search)
+		self.tabs.append_page(search_vbox, search)
 
 		# Create tweet submission box
 		sbox = gtk.TextView()
@@ -146,8 +146,6 @@ class Charry():
 		self.window.show_all()
 
 	def oauth(self):
-		# Import WebBrowser module
-		import webbrowser
 		# Pull the consumer token and token secret out of the XML
 		consumerToken = self.settings.find("oauth/consumerToken")
 		consumerSecret = self.settings.find("oauth/consumerSecret")
@@ -184,6 +182,14 @@ class Charry():
 			print "Error! OAuth credentials are incorrect."
 		return False
 		
+	def link_handler(self, label, uri):
+		if uri[0:4] == "C:HT":
+			self.tabs.set_current_page(1)
+			self.search_entry.set_text(uri[4:])
+			self.searchTweets(None, self.search_entry)
+		else:
+			webbrowser.open(uri)
+		
 	def tweetFormat(self, tweet, type = "normal"):
 		# Search compatibility
 		if type is "search":
@@ -215,7 +221,7 @@ class Charry():
 		urlregex = re.compile("(http[s]?://(?:[a-zA-Z]|[0-9]|[$-_@.&+]|[!*(),]|(?:%[0-9a-fA-F][0-9a-fA-F]))+)", re.IGNORECASE)
 		linked = urlregex.sub(r'<a href="\1">\1</a>', tweet.text)
 		linked = re.sub(r'(\A|\s)@(\w+)', r'\1<a href="http://www.twitter.com/\2">@\2</a>', linked)
-		linked = re.sub(r'(\A|\s)#(\w+)', r'\1<a href="http://search.twitter.com/search?q=%23\2">#\2</a>', linked)
+		linked = re.sub(r'(\A|\s)#(\w+)', r'\1<a href="C:HT#\2">#\2</a>', linked)
 		
 		# Create Label for tweet text
 		text = gtk.Label()
@@ -225,6 +231,8 @@ class Charry():
 		text.set_line_wrap(True)
 		text.set_size_request(300, -1)
 		text.set_markup(linked)
+		# Connect links to our custom link handler
+		text.connect("activate-link", self.link_handler)
 		
 		# Create Label for date/time
 		timedate = gtk.Label()
@@ -305,6 +313,7 @@ class Charry():
 		prompt.set_title("Prompt")
 		# Create and add entry box to dialog
 		entry = gtk.Entry()
+		entry.connect("activate", self.on_enter, prompt.action_area.get_children()[1])
 		prompt.vbox.add(entry)
 		# Show all widgets in prompt
 		prompt.show_all()
