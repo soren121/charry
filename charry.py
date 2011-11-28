@@ -14,6 +14,7 @@ from xml.etree.ElementTree import ElementTree, Element, SubElement
 from urllib import urlretrieve
 from dateutil.parser import parse
 from dateutil.tz import tzlocal
+from xml.sax.saxutils import escape
 gtk.gdk.threads_init()
 	
 class Charry():
@@ -228,7 +229,8 @@ class Charry():
 		
 		# Use regexes to link URLs, hashtags, and usernames
 		urlregex = re.compile("(http[s]?://(?:[a-zA-Z]|[0-9]|[$-_@.&+]|[!*(),]|(?:%[0-9a-fA-F][0-9a-fA-F]))+)", re.IGNORECASE)
-		linked = urlregex.sub(r'<a href="\1">\1</a>', tweet.text)
+		linked = escape(tweet.text)
+		linked = urlregex.sub(r'<a href="\1">\1</a>', linked)
 		linked = re.sub(r'(\A|\s)@(\w+)', r'\1<a href="http://www.twitter.com/\2">@\2</a>', linked)
 		linked = re.sub(r'(\A|\s)#(\w+)', r'\1<a href="C:HT#\2">#\2</a>', linked)
 		
