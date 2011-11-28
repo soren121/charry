@@ -62,7 +62,7 @@ class Charry():
 		# Create new vertical pane split
 		vpane = gtk.VPaned()
 		vpane.set_border_width(3)
-		vpane.set_position(500)
+		vpane.set_position(480)
 		# Add to vertical organizer
 		vbox.pack_start(vpane)	
 
@@ -126,12 +126,20 @@ class Charry():
 		self.tabs.append_page(search_vbox, search)
 
 		# Create tweet submission box
+		sbox_vbox = gtk.VBox(False, 5)
+		sbox_hbox = gtk.HBox()
 		sbox = gtk.TextView()
 		sboxb = gtk.TextBuffer()
 		sbox.set_buffer(sboxb)
-		sbox.set_wrap_mode(gtk.WRAP_WORD)
+		sbox.set_wrap_mode(gtk.WRAP_WORD_CHAR)
 		sbox.connect("key-press-event", self.tweetSubmit, sboxb)
-		vpane.add2(sbox)
+		sbox_vbox.pack_end(sbox, True, True)
+		sbox_count = gtk.Label(140 - int(sboxb.get_char_count()))
+		sbox_count.set_justify(gtk.JUSTIFY_RIGHT)
+		sboxb.connect("changed", self.update_char_count, sbox_count)
+		sbox_hbox.pack_end(sbox_count, False, False)
+		sbox_vbox.pack_start(sbox_hbox, False, False)
+		vpane.add2(sbox_vbox)
 
 		# Create statusbar
 		statusbar = gtk.Statusbar()
@@ -333,6 +341,16 @@ class Charry():
 		
 	def on_enter(self, entry, button):
 		button.clicked()
+		
+	def update_char_count(self, sboxb, sbox_count):
+		if (140 - sboxb.get_char_count()) < 0 :
+			sboxb.delete(sboxb.get_iter_at_offset(140), sboxb.get_end_iter())
+		if (140 - sboxb.get_char_count()) <= 0 :
+			sbox_count.set_markup('<span foreground="#BF1313"><b>0</b></span>')
+		elif (140 - sboxb.get_char_count()) < 20:
+			sbox_count.set_markup('<span foreground="#BF1313">' + str(140 - sboxb.get_char_count()) + '</span>')
+		else:
+			sbox_count.set_markup(str(140 - sboxb.get_char_count()))
 		
 	def load(self):
 		# Check if we've done OAuth login already
