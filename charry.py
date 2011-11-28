@@ -175,8 +175,8 @@ class Charry():
 			print "Error! Failed to get access token."
 		# Plug the access tokens in and verify that everything's correct
 		auth.set_access_token(auth.access_token.key, auth.access_token.secret)
-		api = tweepy.API(auth)
-		if api.verify_credentials():
+		self.api = tweepy.API(auth)
+		if self.api.verify_credentials():
 			# Save access tokens to XML
 			xml_oauth = self.settings.find("oauth")
 			xml_accessToken = SubElement(xml_oauth, "accessToken")
@@ -184,8 +184,10 @@ class Charry():
 			xml_accessSecret = SubElement(xml_oauth, "accessSecret")
 			xml_accessSecret.text = auth.access_token.secret
 			self.settings.write("settings.xml")
-			# Load tweets!
-			self.loadtweets()
+			# Restart
+			import sys, os
+			python = sys.executable
+			os.execl(python, python, *sys.argv)
 		else:
 			print "Error! OAuth credentials are incorrect."
 		return False
@@ -323,7 +325,7 @@ class Charry():
 		prompt.set_title("Prompt")
 		# Create and add entry box to dialog
 		entry = gtk.Entry()
-		entry.connect("activate", self.on_enter, prompt.action_area.get_children()[1])
+		#entry.connect("activate", self.on_enter, prompt.action_area.get_children()[1])
 		prompt.vbox.add(entry)
 		# Show all widgets in prompt
 		prompt.show_all()
