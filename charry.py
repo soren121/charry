@@ -128,18 +128,18 @@ class Charry():
 
 		# Create tweet submission box
 		sbox_vbox = gtk.VBox(False, 5)
-		sbox_hbox = gtk.HBox()
-		sbox = gtk.TextView()
-		sboxb = gtk.TextBuffer()
-		sbox.set_buffer(sboxb)
-		sbox.set_wrap_mode(gtk.WRAP_WORD_CHAR)
-		sbox.connect("key-press-event", self.tweetSubmit, sboxb)
-		sbox_vbox.pack_end(sbox, True, True)
-		sbox_count = gtk.Label(140 - int(sboxb.get_char_count()))
+		self.sbox_hbox = gtk.HBox(False, 5)
+		self.sbox = gtk.TextView()
+		self.sboxb = gtk.TextBuffer()
+		self.sbox.set_buffer(self.sboxb)
+		self.sbox.set_wrap_mode(gtk.WRAP_WORD_CHAR)
+		self.sbox.connect("key-press-event", self.tweetSubmit)
+		sbox_vbox.pack_end(self.sbox, True, True)
+		sbox_count = gtk.Label(140 - int(self.sboxb.get_char_count()))
 		sbox_count.set_justify(gtk.JUSTIFY_RIGHT)
-		sboxb.connect("changed", self.update_char_count, sbox_count)
-		sbox_hbox.pack_end(sbox_count, False, False)
-		sbox_vbox.pack_start(sbox_hbox, False, False)
+		self.sboxb.connect("changed", self.update_char_count, sbox_count)
+		self.sbox_hbox.pack_end(sbox_count, False, False)
+		sbox_vbox.pack_start(self.sbox_hbox, False, False)
 		vpane.add2(sbox_vbox)
 
 		# Create statusbar
@@ -149,7 +149,7 @@ class Charry():
 		vbox.pack_start(eventbox, False, False)
 
 		# Focus tweet submission box
-		sbox.grab_focus()
+		self.sbox.grab_focus()
 
 		# Show all widgets
 		self.window.show_all()
@@ -194,12 +194,54 @@ class Charry():
 		return False
 		
 	def link_handler(self, label, uri):
+		# Is this link a hashtag?
 		if uri[0:4] == "C:HT":
+			# It is!
+			# Open the search tab
 			self.tabs.set_current_page(1)
+			# Set the search entry box to the hashtag in the link
 			self.search_entry.set_text(uri[4:])
+			# Start a search with that hashtag
 			self.searchTweets(None, self.search_entry)
 		else:
-			webbrowser.open(uri)
+			# It's just a link, display it in the browser
+			gtk.show_uri(None, uri, gtk.gdk.CURRENT_TIME)
+			
+	def cancel_reply(self, button, label):
+		# Destroy the "in reply to" label and its cancel button
+		label.destroy()
+		button.destroy()
+		# Empty out tweet box
+		self.sboxb.set_text("")
+		# Clear the reply ID
+		self.tweet_id = None
+			
+	def reply(self, button, tweet_id, name):
+		# Create "in reply to" label above the tweet box
+		label = gtk.Label(name)
+		label.set_markup("in reply to <b>" + name + "</b>")
+		self.sbox_hbox.pack_start(label, False, False)
+		
+		# Make a cancel reply button to go along with it
+		cancel = gtk.Button("X", gtk.STOCK_CANCEL)
+		cancel.connect("clicked", self.cancel_reply, label)
+		self.sbox_hbox.pack_start(cancel, False, False)
+		
+		# Add "@USERNAME" to the tweet box
+		self.sboxb.set_text("@" + name + " ")
+		# Set the ID of the tweet we're replying to
+		self.tweet_id = tweet_id
+		
+		# Show those widgets we just made
+		label.show()
+		cancel.show()
+		
+		# Focus the tweet box
+		self.sbox.grab_focus()
+		
+	def retweet(self, button, tweet_id):
+		# Well, isn't this short and sweet? Retweet it!
+		self.api.retweet(tweet_id)
 		
 	def tweetFormat(self, tweet, type = "normal"):
 		# Search compatibility
@@ -222,10 +264,23 @@ class Charry():
 		# Make GTK image widget from GDK pixbuf
 		avatar = gtk.image_new_from_pixbuf(avatar_pb)
 		
+		# Create horizontal organizer to fit username and buttons
+		hbox = gtk.HBox(False, 5)
+		
 		# Create Label for username
 		name = gtk.Label()
-		name.set_alignment(0, 0)
 		name.set_markup("<b>" + screen_name + "</b>")
+		hbox.pack_start(name, False, False)
+		
+		# Create reply button
+		reply = gtk.Button("Reply")
+		reply.connect("clicked", self.reply, tweet.id, screen_name)
+		hbox.pack_start(reply, False, False)
+		
+		# Create retweet button
+		retweet = gtk.Button("Retweet")
+		retweet.connect("clicked", self.retweet, tweet.id)
+		hbox.pack_start(retweet, False, False)
 		
 		# Use regexes to link URLs, hashtags, and usernames
 		urlregex = re.compile("(http[s]?://(?:[a-zA-Z]|[0-9]|[$-_@.&+]|[!*(),]|(?:%[0-9a-fA-F][0-9a-fA-F]))+)", re.IGNORECASE)
@@ -258,7 +313,7 @@ class Charry():
 		tweetbox.pack_end(tweetbox_inner)
 		tweetbox.set_size_request(370, -1)
 		tweetbox.pack_start(avatar)
-		tweetbox_inner.pack_start(name, False, False)
+		tweetbox_inner.pack_start(hbox, False, False)
 		tweetbox_inner.pack_start(text, False, False)
 		tweetbox_inner.pack_start(timedate, False, False)
 		
@@ -303,22 +358,37 @@ class Charry():
 		# Clear search container
 		for tweet in self.search.get_children():
 			tweet.destroy()
+		# Is the query empty?
 		if q is not "":
+			# List search results, run through tweet formatter
 			for tweet in self.api.search(q):
 				self.tweetFormat(tweet, "search")
 		
-	def tweetSubmit(self, widget, event, sboxb):
+	def tweetSubmit(self, widget, event):
+		# Check if the user pressed Enter/Return
 		if event.keyval == gtk.gdk.keyval_from_name('Return'):
+			# Check if the user pressed Enter AND Shift (because that's a new line)
 			if not (event.state and gtk.gdk.SHIFT_MASK):
-				tweet = sboxb.get_text(sboxb.get_start_iter(), sboxb.get_end_iter())
+				# Get the tweet text
+				tweet = self.sboxb.get_text(self.sboxb.get_start_iter(), self.sboxb.get_end_iter())
+				# Make sure the length is good
 				if len(tweet) > 0 and len(tweet) <= 140:
-					self.api.update_status(tweet)
-					sboxb.set_text('')
+					# Are we replying?
+					if self.tweet_id != None:
+						# Yeah, send Twitter the ID of the tweet we're replying to
+						self.api.update_status(tweet, self.tweet_id)
+					else:
+						# Not a reply, just send the tweet
+						self.api.update_status(tweet)
+					# Empty out the tweet box
+					self.sboxb.set_text('')
 					return True
 			else:
+				# Ignore action
 				return False
 		else:
-			return False		
+			# Ignore action
+			return False
 
 	def gtkPrompt(self, name):
 		# Create new GTK dialog with all the fixings
@@ -347,12 +417,16 @@ class Charry():
 		button.clicked()
 		
 	def update_char_count(self, sboxb, sbox_count):
+		# If the user tries to type more than 140 characters, delete anything in the range of 140-end of buffer
 		if (140 - sboxb.get_char_count()) < 0 :
 			sboxb.delete(sboxb.get_iter_at_offset(140), sboxb.get_end_iter())
+		# Set character count to 0 in bold
 		if (140 - sboxb.get_char_count()) <= 0 :
 			sbox_count.set_markup('<span foreground="#BF1313"><b>0</b></span>')
+		# If less than 20, set character count to the color red
 		elif (140 - sboxb.get_char_count()) < 20:
 			sbox_count.set_markup('<span foreground="#BF1313">' + str(140 - sboxb.get_char_count()) + '</span>')
+		# Show character count normally if more than 20
 		else:
 			sbox_count.set_markup(str(140 - sboxb.get_char_count()))
 		
