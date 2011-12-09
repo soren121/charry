@@ -203,9 +203,6 @@ class Charry():
 			self.search_entry.set_text(uri[4:])
 			# Start a search with that hashtag
 			self.searchTweets(None, self.search_entry)
-		else:
-			# It's just a link, display it in the browser
-			gtk.show_uri(None, uri, gtk.gdk.CURRENT_TIME)
 			
 	def cancel_reply(self, button, label):
 		# Destroy the "in reply to" label and its cancel button
