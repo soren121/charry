@@ -150,6 +150,9 @@ class Charry():
 
 		# Focus tweet submission box
 		self.sbox.grab_focus()
+		
+		# Set empty reply ID
+		self.tweet_id = None
 
 		# Show all widgets
 		self.window.show_all()
