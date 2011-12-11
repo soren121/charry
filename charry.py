@@ -244,23 +244,36 @@ class Charry():
 		self.api.retweet(tweet_id)
 		
 	def tweetFormat(self, tweet, type = "normal"):
+		# Check for retweet
+		try:
+			tweet.retweeted_status
+		except AttributeError:
+			tweet.retweeted_status = None
+			
 		# Search compatibility
 		if type is "search":
 			screen_name = tweet.from_user
 			profile_image_url = tweet.profile_image_url
+			profile_image_filename = tweet.user.screen_name
 			tweets = self.search
 		else:
-			screen_name = tweet.user.screen_name
-			profile_image_url = tweet.user.profile_image_url
+			if tweet.retweeted_status != None:
+				tweet.text = tweet.retweeted_status.text
+				profile_image_url = tweet.retweeted_status.user.profile_image_url
+				profile_image_filename = tweet.retweeted_status.user.screen_name
+			else:
+				profile_image_url = tweet.user.profile_image_url
+				profile_image_filename = tweet.user.screen_name
+			screen_name = tweet.user.screen_name	
 			tweets = self.tweets
 	
 		# Check to see if we've cached that user's avatar already
 		import os
-		if not os.path.exists("cache/images/" + screen_name + ".cache"):
+		if not os.path.exists("cache/images/" + profile_image_filename + ".cache"):
 			# Retrieve avatar and save to cache/images/USERNAME.cache
-			urlretrieve(profile_image_url, "cache/images/" + screen_name + ".cache")
+			urlretrieve(profile_image_url, "cache/images/" + profile_image_filename + ".cache")
 		# Load avatar into GDK pixbuf at size 48x48
-		avatar_pb = gtk.gdk.pixbuf_new_from_file_at_size("cache/images/" + screen_name + ".cache", 48, 48)
+		avatar_pb = gtk.gdk.pixbuf_new_from_file_at_size("cache/images/" + profile_image_filename + ".cache", 48, 48)
 		# Make GTK image widget from GDK pixbuf
 		avatar = gtk.image_new_from_pixbuf(avatar_pb)
 		
@@ -269,7 +282,11 @@ class Charry():
 		
 		# Create Label for username
 		name = gtk.Label()
-		name.set_markup("<b>" + screen_name + "</b>")
+		if tweet.retweeted_status != None:
+			name.set_markup('<span foreground="#2CA34A"><b>' + tweet.retweeted_status.user.screen_name + '</b></span>')
+			name.set_tooltip_markup("retweeted by <b>" + screen_name + "</b>")
+		else:
+			name.set_markup("<b>" + screen_name + "</b>")
 		hbox.pack_start(name, False, False)
 		
 		# Create reply button
