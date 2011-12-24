@@ -254,7 +254,7 @@ class Charry():
 		if type is "search":
 			screen_name = tweet.from_user
 			profile_image_url = tweet.profile_image_url
-			profile_image_filename = tweet.user.screen_name
+			profile_image_filename = screen_name
 			tweets = self.search
 		else:
 			if tweet.retweeted_status != None:
