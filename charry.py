@@ -1,15 +1,5 @@
 #!/usr/bin/env python
-
-############################################
-##
-##  Charry 0.9 (Python rewrite)
-##  A Twitter client written in Python
-##
-##  Copyright (c) 2011 soren121.
-##
-############################################
-
-import threading, thread, gtk, tweepy, re, webbrowser
+import threading, thread, gtk, tweepy, os, re, webbrowser
 from xml.etree.ElementTree import ElementTree, Element, SubElement
 from urllib import urlretrieve
 from dateutil.parser import parse
@@ -19,6 +9,9 @@ gtk.gdk.threads_init()
 	
 class Charry():
 	def __init__(self):
+		# Set script directory
+		self.root_dir = os.path.dirname(os.path.realpath(__file__))
+		
 		# Create window
 		self.window = gtk.Window()
 		# Set title, size, and action for close button
@@ -28,7 +21,7 @@ class Charry():
 		
 		# Open settings XML
 		self.settings = ElementTree()
-		self.settings.parse("settings.xml")
+		self.settings.parse(self.root_dir + "/settings.xml")
 
 		# Start vertical organizer
 		vbox = gtk.VBox()
@@ -268,12 +261,11 @@ class Charry():
 			tweets = self.tweets
 	
 		# Check to see if we've cached that user's avatar already
-		import os
-		if not os.path.exists("cache/images/" + profile_image_filename + ".cache"):
+		if not os.path.exists(self.root_dir + "/cache/images/" + profile_image_filename + ".cache"):
 			# Retrieve avatar and save to cache/images/USERNAME.cache
-			urlretrieve(profile_image_url, "cache/images/" + profile_image_filename + ".cache")
+			urlretrieve(profile_image_url, self.root_dir + "/cache/images/" + profile_image_filename + ".cache")
 		# Load avatar into GDK pixbuf at size 48x48
-		avatar_pb = gtk.gdk.pixbuf_new_from_file_at_size("cache/images/" + profile_image_filename + ".cache", 48, 48)
+		avatar_pb = gtk.gdk.pixbuf_new_from_file_at_size(self.root_dir + "/cache/images/" + profile_image_filename + ".cache", 48, 48)
 		# Make GTK image widget from GDK pixbuf
 		avatar = gtk.image_new_from_pixbuf(avatar_pb)
 		
