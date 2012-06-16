@@ -182,7 +182,7 @@ class Charry():
 			xml_accessSecret.text = auth.access_token.secret
 			self.settings.write("settings.xml")
 			# Restart
-			import sys, os
+			import sys
 			python = sys.executable
 			os.execl(python, python, *sys.argv)
 		else:
