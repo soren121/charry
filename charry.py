@@ -204,8 +204,6 @@ class Charry():
 		# Destroy the "in reply to" label and its cancel button
 		label.destroy()
 		button.destroy()
-		# Empty out tweet box
-		self.sboxb.set_text("")
 		# Clear the reply ID
 		self.tweet_id = None
 			
@@ -245,9 +243,8 @@ class Charry():
 			
 		# Search compatibility
 		if type is "search":
-			screen_name = tweet.from_user
-			profile_image_url = tweet.profile_image_url
-			profile_image_filename = screen_name
+			profile_image_url = tweet.user.profile_image_url
+			profile_image_filename = tweet.user.screen_name
 			tweets = self.search
 		else:
 			if tweet.retweeted_status != None:
@@ -256,8 +253,7 @@ class Charry():
 				profile_image_filename = tweet.retweeted_status.user.screen_name
 			else:
 				profile_image_url = tweet.user.profile_image_url
-				profile_image_filename = tweet.user.screen_name
-			screen_name = tweet.user.screen_name	
+				profile_image_filename = tweet.user.screen_name	
 			tweets = self.tweets
 	
 		# Check to see if we've cached that user's avatar already
@@ -276,14 +272,14 @@ class Charry():
 		name = gtk.Label()
 		if tweet.retweeted_status != None:
 			name.set_markup('<span foreground="#2CA34A"><b>' + tweet.retweeted_status.user.screen_name + '</b></span>')
-			name.set_tooltip_markup("retweeted by <b>" + screen_name + "</b>")
+			name.set_tooltip_markup("retweeted by <b>" + tweet.user.screen_name + "</b>")
 		else:
-			name.set_markup("<b>" + screen_name + "</b>")
+			name.set_markup("<b>" + tweet.user.screen_name + "</b>")
 		hbox.pack_start(name, False, False)
 		
 		# Create reply button
 		reply = gtk.Button("Reply")
-		reply.connect("clicked", self.reply, tweet.id, screen_name)
+		reply.connect("clicked", self.reply, tweet.id, tweet.user.screen_name)
 		hbox.pack_start(reply, False, False)
 		
 		# Create retweet button
@@ -427,11 +423,12 @@ class Charry():
 		
 	def update_char_count(self, sboxb, sbox_count):
 		# If the user tries to type more than 140 characters, delete anything in the range of 140-end of buffer
-		if (140 - sboxb.get_char_count()) < 0 :
-			sboxb.delete(sboxb.get_iter_at_offset(140), sboxb.get_end_iter())
+		# This effectively makes it impossible to type more than 140 characters
+		#if (140 - sboxb.get_char_count()) < 0 :
+			#sboxb.delete(sboxb.get_iter_at_offset(140), sboxb.get_end_iter())
 		# Set character count to 0 in bold
 		if (140 - sboxb.get_char_count()) <= 0 :
-			sbox_count.set_markup('<span foreground="#BF1313"><b>0</b></span>')
+			sbox_count.set_markup('<span foreground="#BF1313"><b>' + str(140 - sboxb.get_char_count()) + '</b></span>')
 		# If less than 20, set character count to the color red
 		elif (140 - sboxb.get_char_count()) < 20:
 			sbox_count.set_markup('<span foreground="#BF1313">' + str(140 - sboxb.get_char_count()) + '</span>')
